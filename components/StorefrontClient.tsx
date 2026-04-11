@@ -31,20 +31,28 @@ const PAGE_SIZE = 24;
 
 const FAQ = [
   {
-    q: "¿Los precios incluyen IGV?",
-    a: "Sí. Todos los precios mostrados incluyen el IGV del 18%.",
+    q: "¿El precio que veo es lo que voy a pagar?",
+    a: "Sí. Todos los precios incluyen el IGV del 18%. No hay cargos adicionales ni sorpresas al momento de coordinar el pago.",
   },
   {
-    q: "¿Hacen envíos?",
-    a: "Sí, enviamos a todo el país. El costo y tiempo se coordina por WhatsApp según tu ubicación.",
+    q: "¿Los equipos reacondicionados son confiables?",
+    a: "Sí. Cada equipo pasa por revisión técnica antes de publicarse. Tienen garantía técnica local y se indica claramente su condición y estado en la ficha.",
   },
   {
-    q: "¿Qué garantía ofrecen?",
-    a: "Los equipos nuevos mantienen garantía de fabricante y los reacondicionados cuentan con garantía técnica local.",
+    q: "¿Puedo probar el equipo antes de comprarlo?",
+    a: "Si estás en Lima puedes coordinar una revisión presencial. Si eres de provincia, te enviamos fotos y video detallado por WhatsApp antes de confirmar.",
+  },
+  {
+    q: "¿Cómo es el proceso de compra?",
+    a: "Encuentras el equipo en el catálogo, haces clic en WhatsApp y coordinamos disponibilidad, forma de pago y entrega. Todo por chat, sin formularios.",
+  },
+  {
+    q: "¿Hacen envíos a provincia?",
+    a: "Sí, enviamos a todo el Perú por Olva Courier, Shalom u otro servicio según tu ubicación. El costo de envío se coordina por WhatsApp.",
   },
   {
     q: "¿Qué medios de pago aceptan?",
-    a: "Aceptamos transferencia bancaria, Yape/Plin y tarjetas coordinadas por WhatsApp.",
+    a: "Transferencia bancaria, Yape y Plin. Para compras de provincia también aceptamos depósito a cuenta.",
   },
 ];
 
@@ -366,7 +374,7 @@ export default function StorefrontClient({
               onClick={() => trackStoreEvent("whatsapp_click", { source: "header" })}
               className="hidden sm:flex items-center gap-2 px-4 py-2 bg-green-500 text-white text-sm font-semibold rounded-xl hover:bg-green-600 transition-colors"
             >
-              WhatsApp
+              Hablar con un asesor
             </a>
           )}
         </div>
@@ -583,22 +591,47 @@ export default function StorefrontClient({
                 </div>
               </div>
 
-              <div className="bg-slate-900 text-white rounded-3xl p-6">
-                <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
-                  Cierre comercial
-                </p>
-                <h3 className="mt-3 text-2xl font-bold">
-                  Convierte visitas en consultas listas para vender.
-                </h3>
-                <p className="mt-3 text-sm text-slate-300 leading-7">
-                  El siguiente paso comercial es reforzar reputación con
-                  testimonios, garantía visible y una política de entrega breve.
-                </p>
-                <div className="mt-5 space-y-2 text-sm text-slate-200">
-                  <p>Garantía visible en home y ficha.</p>
-                  <p>Ubicación o cobertura de despacho.</p>
-                  <p>Tiempo estimado de respuesta y entrega.</p>
+              <div className="bg-slate-900 text-white rounded-3xl p-6 flex flex-col justify-between">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-blue-400">
+                    ¿Por qué elegirnos?
+                  </p>
+                  <h3 className="mt-3 text-2xl font-bold leading-snug">
+                    El equipo correcto, al precio justo, con respaldo real.
+                  </h3>
+                  <p className="mt-3 text-sm text-slate-300 leading-7">
+                    No vendemos cajas. Te ayudamos a encontrar la laptop que
+                    necesitas, con stock disponible y sin sorpresas en el precio.
+                  </p>
+                  <ul className="mt-5 space-y-3">
+                    {[
+                      { icon: '✓', text: 'Precios finales con IGV incluido — sin cobros extra al pagar' },
+                      { icon: '✓', text: 'Stock real: lo que ves está disponible para entrega inmediata' },
+                      { icon: '✓', text: 'Te asesoramos por WhatsApp para que elijas sin equivocarte' },
+                      { icon: '✓', text: 'Garantía técnica en todos los equipos reacondicionados' },
+                    ].map(({ icon, text }) => (
+                      <li key={text} className="flex items-start gap-2.5 text-sm text-slate-200">
+                        <span className="text-green-400 font-bold mt-0.5 flex-shrink-0">{icon}</span>
+                        <span>{text}</span>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
+                {waNumber && (
+                  <a
+                    href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hola, quiero asesoría para elegir una laptop.')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => trackStoreEvent('whatsapp_click', { source: 'why-us' })}
+                    className="mt-6 flex items-center justify-center gap-2 px-5 py-3 bg-green-500 hover:bg-green-400 text-white font-semibold rounded-2xl transition-colors text-sm"
+                  >
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/>
+                      <path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.558 4.122 1.533 5.855L.054 23.447a.5.5 0 00.499.553h.056l5.752-1.507A11.943 11.943 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.938a9.932 9.932 0 01-5.035-1.362l-.361-.214-3.737.979.998-3.647-.235-.374A9.938 9.938 0 012.062 12C2.062 6.51 6.51 2.062 12 2.062S21.938 6.51 21.938 12 17.49 21.938 12 21.938z"/>
+                    </svg>
+                    Pedir asesoría gratis
+                  </a>
+                )}
               </div>
             </section>
           </div>
@@ -607,37 +640,44 @@ export default function StorefrontClient({
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 pb-24 sm:pb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-sm text-slate-500">
-          <div className="sm:hidden">
-            <BrandMark compact variant="icon" />
-          </div>
-          <div className="hidden sm:block">
-            <BrandMark compact showSlogan />
-          </div>
-          <div className="grid grid-cols-2 sm:flex items-center gap-x-4 gap-y-2 w-full sm:w-auto text-sm">
-            {storeEmail && (
-              <a
-                href={`mailto:${storeEmail}`}
-                onClick={() => trackStoreEvent("email_click", { source: "footer" })}
-                className="col-span-2 sm:col-span-1 break-all hover:text-slate-700"
-              >
-                {storeEmail}
-              </a>
-            )}
-            {waNumber && (
-              <a
-                href={`https://wa.me/${waNumber}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={() => trackStoreEvent("whatsapp_click", { source: "footer" })}
-                className="hover:text-green-600"
-              >
-                WhatsApp
-              </a>
-            )}
-            <Link href="/admin" className="hover:text-slate-700">
-              Admin
-            </Link>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-5 pb-24 sm:pb-6">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-sm text-slate-500">
+            <div>
+              <div className="sm:hidden mb-2">
+                <BrandMark compact variant="icon" />
+              </div>
+              <div className="hidden sm:block mb-1">
+                <BrandMark compact showSlogan />
+              </div>
+              <p className="text-xs text-slate-400 max-w-xs">
+                Laptops nuevas y reacondicionadas con garantía técnica. Enviamos a todo el Perú.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 sm:flex items-center gap-x-4 gap-y-2 w-full sm:w-auto text-sm">
+              {storeEmail && (
+                <a
+                  href={`mailto:${storeEmail}`}
+                  onClick={() => trackStoreEvent("email_click", { source: "footer" })}
+                  className="col-span-2 sm:col-span-1 break-all hover:text-slate-700"
+                >
+                  {storeEmail}
+                </a>
+              )}
+              {waNumber && (
+                <a
+                  href={`https://wa.me/${waNumber}?text=${encodeURIComponent("Hola, vi el catálogo y me interesa una laptop. ¿Puedes asesorarme?")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => trackStoreEvent("whatsapp_click", { source: "footer" })}
+                  className="hover:text-green-600 font-medium"
+                >
+                  WhatsApp
+                </a>
+              )}
+              <Link href="/admin" className="hover:text-slate-700 text-slate-300">
+                Admin
+              </Link>
+            </div>
           </div>
         </div>
       </footer>
@@ -645,14 +685,17 @@ export default function StorefrontClient({
       {/* Floating WhatsApp button */}
       {waNumber && (
         <a
-          href={`https://wa.me/${waNumber}?text=${encodeURIComponent("Hola, vi su catálogo y quiero cotizar una laptop.")}`}
+          href={`https://wa.me/${waNumber}?text=${encodeURIComponent("Hola, vi el catálogo y me interesa una laptop. ¿Puedes asesorarme?")}`}
           target="_blank"
           rel="noopener noreferrer"
           title="Contactar por WhatsApp"
           onClick={() => trackStoreEvent("whatsapp_click", { source: "floating" })}
-          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 px-4 sm:px-4 h-12 sm:h-14 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-lg hover:shadow-xl flex items-center gap-2 transition-all hover:scale-105"
+          className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 px-4 sm:px-5 h-12 sm:h-14 bg-green-500 hover:bg-green-600 text-white rounded-full shadow-lg hover:shadow-xl flex items-center gap-2 transition-all hover:scale-105"
         >
-          <span className="font-semibold text-sm">Cotizar</span>
+          <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.124.558 4.122 1.533 5.855L.054 23.447a.5.5 0 00.499.553h.056l5.752-1.507A11.943 11.943 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.938a9.932 9.932 0 01-5.035-1.362l-.361-.214-3.737.979.998-3.647-.235-.374A9.938 9.938 0 012.062 12C2.062 6.51 6.51 2.062 12 2.062S21.938 6.51 21.938 12 17.49 21.938 12 21.938z"/>
+            </svg>
+          <span className="font-semibold text-sm">Consultar ahora</span>
         </a>
       )}
     </div>
