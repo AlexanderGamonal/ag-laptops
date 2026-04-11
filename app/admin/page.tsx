@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { supabase, type Laptop } from '@/lib/supabase'
+import { getBrowserSupabase, type Laptop } from '@/lib/supabase'
 import { formatPrice, formatSellingPrice } from '@/lib/pricing'
 
 export default function AdminDashboard() {
@@ -11,10 +11,21 @@ export default function AdminDashboard() {
   const [loading,  setLoading]  = useState(true)
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState<'all' | 'active' | 'hidden'>('all')
-  const [toggling, setToggling] = useState<string | null>(null)
+  const [toggling,     setToggling]     = useState<string | null>(null)
+  const [deleting,     setDeleting]     = useState<string | null>(null)
+  const [confirmId,    setConfirmId]    = useState<string | null>(null)
+  const [deleteError,  setDeleteError]  = useState<string | null>(null)
+
+  async function getAuthHeader(): Promise<Record<string, string>> {
+    const supabase = getBrowserSupabase()
+    const { data } = await supabase.auth.getSession()
+    const token = data.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  }
 
   const fetchLaptops = useCallback(async () => {
     setLoading(true)
+    const supabase = getBrowserSupabase()
     const { data } = await supabase
       .from('laptops')
       .select('*')
@@ -25,11 +36,35 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchLaptops() }, [fetchLaptops])
 
+  async function deleteLaptop(id: string) {
+    setDeleting(id)
+    setDeleteError(null)
+    try {
+      const authHeader = await getAuthHeader()
+      const res = await fetch(`/api/laptops/${id}`, {
+        method: 'DELETE',
+        headers: authHeader,
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setDeleteError(data.error || `Error ${res.status} al eliminar.`)
+        return
+      }
+      setLaptops(prev => prev.filter(l => l.id !== id))
+      setConfirmId(null)
+    } catch {
+      setDeleteError('Error de red al eliminar.')
+    } finally {
+      setDeleting(null)
+    }
+  }
+
   async function toggleActive(laptop: Laptop) {
     setToggling(laptop.id)
+    const authHeader = await getAuthHeader()
     await fetch(`/api/laptops/${laptop.id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader },
       body: JSON.stringify({ activo: !laptop.activo }),
     })
     setLaptops(prev => prev.map(l => l.id === laptop.id ? { ...l, activo: !l.activo } : l))
@@ -54,8 +89,45 @@ export default function AdminDashboard() {
     sinFoto: laptops.filter(l => !l.foto_1 && !l.foto_2 && !l.foto_3).length,
   }
 
+  const confirmLaptop = laptops.find(l => l.id === confirmId)
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Modal de confirmación de eliminación */}
+      {confirmId && confirmLaptop && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Eliminar laptop</h2>
+            <p className="text-slate-600 text-sm mb-1">
+              ¿Estás seguro de que quieres eliminar este equipo? Esta acción no se puede deshacer.
+            </p>
+            <p className="font-mono text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 mb-4 truncate">
+              {confirmLaptop.numero_parte} — {confirmLaptop.descripcion || 'Sin descripción'}
+            </p>
+            {deleteError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-4">
+                {deleteError}
+              </p>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirmId(null)}
+                disabled={deleting === confirmId}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => deleteLaptop(confirmId)}
+                disabled={deleting === confirmId}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {deleting === confirmId ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
@@ -167,7 +239,7 @@ export default function AdminDashboard() {
                         <p className="line-clamp-2 text-slate-700">{laptop.descripcion || '—'}</p>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className="font-semibold text-blue-700">{formatSellingPrice(laptop.precio)}</span>
+                        <span className="font-semibold text-blue-700">{formatSellingPrice(laptop.precio, laptop)}</span>
                         <span className="block text-xs text-slate-400">{formatPrice(laptop.precio)} proveedor</span>
                       </td>
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{laptop.condicion || '—'}</td>
@@ -185,15 +257,26 @@ export default function AdminDashboard() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/admin/laptops/${laptop.id}`}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium transition-colors"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                          </svg>
-                          Fotos
-                        </Link>
+                        <div className="flex items-center justify-end gap-2">
+                          <Link
+                            href={`/admin/laptops/${laptop.id}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-medium transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            Fotos
+                          </Link>
+                          <button
+                            onClick={() => { setConfirmId(laptop.id); setDeleteError(null) }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 text-xs font-medium transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            Eliminar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

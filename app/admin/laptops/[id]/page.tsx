@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { supabase, type Laptop } from '@/lib/supabase'
+import { getBrowserSupabase, type Laptop } from '@/lib/supabase'
 import { formatSellingPrice, formatPrice } from '@/lib/pricing'
 import PhotoUploader from '@/components/PhotoUploader'
 
@@ -12,6 +12,7 @@ export default function EditLaptopPhotos({ params }: { params: { id: string } })
   const [error,   setError]   = useState<string | null>(null)
 
   useEffect(() => {
+    const supabase = getBrowserSupabase()
     supabase
       .from('laptops')
       .select('*')
@@ -80,7 +81,7 @@ export default function EditLaptopPhotos({ params }: { params: { id: string } })
               <span className="font-semibold text-slate-600">{formatPrice(laptop.precio)}</span>
               <span className="text-slate-300">→</span>
               <span className="text-xs text-slate-400">Venta:</span>
-              <span className="font-bold text-blue-700">{formatSellingPrice(laptop.precio)}</span>
+              <span className="font-bold text-blue-700">{formatSellingPrice(laptop.precio, laptop)}</span>
             </div>
           )}
           {laptop.condicion && <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-xs">{laptop.condicion}</span>}

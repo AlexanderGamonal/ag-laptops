@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { useState, useRef } from 'react'
+import { getBrowserSupabase } from '@/lib/supabase'
 
 type Slot = 1 | 2 | 3
 
@@ -17,6 +18,20 @@ export default function PhotoUploader({ laptopId, slot, currentUrl, onUpdate }: 
   const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  async function getAdminHeaders() {
+    const supabase = getBrowserSupabase()
+    const { data, error } = await supabase.auth.getSession()
+    const accessToken = data.session?.access_token
+
+    if (error || !accessToken) {
+      throw new Error('SESSION_EXPIRED')
+    }
+
+    return {
+      Authorization: `Bearer ${accessToken}`,
+    }
+  }
+
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -28,10 +43,12 @@ export default function PhotoUploader({ laptopId, slot, currentUrl, onUpdate }: 
       const formData = new FormData()
       formData.append('file', file)
       formData.append('slot', String(slot))
+      const headers = await getAdminHeaders()
 
       const res = await fetch(`/api/laptops/${laptopId}/photos`, {
         method: 'POST',
         body: formData,
+        headers,
       })
       const data = await res.json()
 
@@ -40,8 +57,12 @@ export default function PhotoUploader({ laptopId, slot, currentUrl, onUpdate }: 
       } else {
         onUpdate(slot, data.url)
       }
-    } catch {
-      setError('Error de red al subir la foto.')
+    } catch (err) {
+      if (err instanceof Error && err.message === 'SESSION_EXPIRED') {
+        setError('Tu sesión de administrador expiró. Vuelve a iniciar sesión.')
+      } else {
+        setError('Error de red al subir la foto.')
+      }
     } finally {
       setLoading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -55,8 +76,10 @@ export default function PhotoUploader({ laptopId, slot, currentUrl, onUpdate }: 
     setError(null)
 
     try {
+      const headers = await getAdminHeaders()
       const res = await fetch(`/api/laptops/${laptopId}/photos?slot=${slot}`, {
         method: 'DELETE',
+        headers,
       })
       const data = await res.json()
 
@@ -65,8 +88,12 @@ export default function PhotoUploader({ laptopId, slot, currentUrl, onUpdate }: 
       } else {
         onUpdate(slot, null)
       }
-    } catch {
-      setError('Error de red al eliminar la foto.')
+    } catch (err) {
+      if (err instanceof Error && err.message === 'SESSION_EXPIRED') {
+        setError('Tu sesión de administrador expiró. Vuelve a iniciar sesión.')
+      } else {
+        setError('Error de red al eliminar la foto.')
+      }
     } finally {
       setLoading(false)
     }

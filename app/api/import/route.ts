@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 import { parseExcelBuffer } from '@/lib/excel-parser'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request)
+    const rl = rateLimit(`import:${ip}`, 20, 10 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Demasiadas solicitudes. Intenta de nuevo en ${rl.retryAfterSeconds}s.` },
+        { status: 429 }
+      )
+    }
+
+    const admin = await requireAdminRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File | null
 
@@ -39,30 +55,33 @@ export async function POST(request: NextRequest) {
     const BATCH_SIZE = 50
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       const batch = rows.slice(i, i + BATCH_SIZE)
+      const batchParts = batch.map((r: { numero_parte: string }) => r.numero_parte)
 
-      const { data, error } = await supabase
+      // Determinar cuáles ya existen ANTES del upsert
+      const { data: existing } = await supabase
+        .from('laptops')
+        .select('numero_parte')
+        .in('numero_parte', batchParts)
+
+      const existingSet = new Set((existing || []).map((r: { numero_parte: string }) => r.numero_parte))
+
+      const { error } = await supabase
         .from('laptops')
         .upsert(batch, {
           onConflict: 'numero_parte',
           ignoreDuplicates: false,
         })
-        .select('id, numero_parte, created_at, updated_at')
 
       if (error) {
         importErrors.push(`Error en lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
         continue
       }
 
-      // Contar nuevos vs actualizados comparando timestamps
-      if (data) {
-        const now = Date.now()
-        for (const row of data) {
-          const createdAt = new Date(row.created_at).getTime()
-          if (now - createdAt < 5000) {
-            inserted++
-          } else {
-            updated++
-          }
+      for (const part of batchParts) {
+        if (existingSet.has(part)) {
+          updated++
+        } else {
+          inserted++
         }
       }
     }

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { getBrowserSupabase } from '@/lib/supabase'
 
 const storeName = process.env.NEXT_PUBLIC_STORE_NAME || 'TechLaptops'
 
@@ -18,13 +18,29 @@ export default function LoginPage() {
     setLoading(true)
     setError(null)
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const supabase = getBrowserSupabase()
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       setError('Credenciales incorrectas. Verifica tu email y contraseña.')
       setLoading(false)
     } else {
+      const accessToken = data.session?.access_token
+      const sessionRes = await fetch('/api/admin/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessToken }),
+      })
+
+      if (!sessionRes.ok) {
+        await supabase.auth.signOut()
+        setError('Tu cuenta no tiene permisos para administrar la tienda.')
+        setLoading(false)
+        return
+      }
+
       router.replace('/admin')
+      router.refresh()
     }
   }
 

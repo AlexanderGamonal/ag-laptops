@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
+import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
 const BUCKET = 'laptop-photos'
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
@@ -10,6 +12,20 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const ip = getClientIp(request)
+    const rl = rateLimit(`photos:${ip}`, 60, 10 * 60 * 1000)
+    if (!rl.allowed) {
+      return NextResponse.json(
+        { error: `Demasiadas solicitudes. Intenta de nuevo en ${rl.retryAfterSeconds}s.` },
+        { status: 429 }
+      )
+    }
+
+    const admin = await requireAdminRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file    = formData.get('file') as File | null
     const slot    = formData.get('slot') as string | null // '1', '2', o '3'
@@ -93,6 +109,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const admin = await requireAdminRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const slot = searchParams.get('slot')
 

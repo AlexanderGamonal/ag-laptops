@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { Laptop } from '@/lib/supabase'
 import type { Specs } from '@/lib/spec-extractor'
 import { formatSellingPrice } from '@/lib/pricing'
+import { getLaptopHref } from '@/lib/laptop-slug'
 
 // Colores por marca
 const BRAND_COLORS: Record<string, string> = {
@@ -36,25 +37,25 @@ export default function LaptopCard({ laptop, specs }: LaptopCardProps) {
 
   // Chips de specs compactas para mostrar en la tarjeta
   const specChips: { icon: string; label: string }[] = []
-  if (specs?.processor)    specChips.push({ icon: '⚡', label: specs.processor })
+  if (specs?.processor_family) specChips.push({ icon: '⚡', label: specs.processor_family })
   if (specs?.ram_gb)       specChips.push({ icon: '💾', label: `${specs.ram_gb}GB RAM` })
   if (specs?.storage)      specChips.push({ icon: '🗄️', label: specs.storage })
   if (specs?.screen_in)    specChips.push({ icon: '🖥️', label: `${specs.screen_in}"` })
-  if (specs?.gpu)          specChips.push({ icon: '🎮', label: specs.gpu })
+  if (specs?.gpu_family)   specChips.push({ icon: '🎮', label: specs.gpu_family })
 
   return (
     <Link
-      href={`/laptop/${laptop.id}`}
+      href={getLaptopHref(laptop)}
       className="group flex flex-col bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 overflow-hidden"
     >
       {/* Imagen */}
-      <div className="relative h-44 bg-slate-100 flex items-center justify-center overflow-hidden">
+      <div className="relative h-52 bg-gradient-to-b from-white via-slate-50 to-slate-100 flex items-center justify-center overflow-hidden">
         {mainPhoto ? (
           <Image
             src={mainPhoto}
             alt={laptop.descripcion?.substring(0, 60) || 'Producto'}
             fill
-            className="object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+            className="object-contain object-center p-0.5 sm:p-1 group-hover:scale-[1.04] transition-transform duration-300"
             sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
         ) : (
@@ -111,7 +112,7 @@ export default function LaptopCard({ laptop, specs }: LaptopCardProps) {
         <div className="flex items-center justify-between pt-2 border-t border-slate-100 mt-auto">
           <div>
             <span className="text-lg font-bold text-blue-700">
-              {formatSellingPrice(laptop.precio)}
+              {formatSellingPrice(laptop.precio, laptop)}
             </span>
             <span className="text-xs text-slate-400 block leading-none mt-0.5">IGV incluido</span>
           </div>

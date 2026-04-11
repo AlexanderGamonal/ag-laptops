@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 
 export async function PATCH(
@@ -6,6 +7,11 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const admin = await requireAdminRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
     const body = await request.json()
     const supabase = createAdminClient()
 
@@ -42,7 +48,28 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const admin = await requireAdminRequest(_request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
     const supabase = createAdminClient()
+
+    // Obtener numero_parte para limpiar fotos del storage
+    const { data: laptop } = await supabase
+      .from('laptops')
+      .select('numero_parte')
+      .eq('id', params.id)
+      .single()
+
+    if (laptop?.numero_parte) {
+      const safePart = laptop.numero_parte.replace(/[^a-zA-Z0-9-_]/g, '_')
+      const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+      const paths = [1, 2, 3].flatMap(slot =>
+        extensions.map(ext => `${safePart}/foto-${slot}.${ext}`)
+      )
+      await supabase.storage.from('laptop-photos').remove(paths)
+    }
 
     const { error } = await supabase
       .from('laptops')

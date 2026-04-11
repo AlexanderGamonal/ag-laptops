@@ -4,27 +4,37 @@
  */
 
 export type Specs = {
-  processor:    string | null   // "Core i7", "Ryzen 7", "Core Ultra 9", etc.
+  processor:    string | null   // "AMD Ryzen 7 7445HS", "Intel Core i7-14650HX", etc.
+  processor_family: string | null // "Ryzen 7", "Core i7", "Core Ultra 9"
   ram_gb:       number | null   // 8, 16, 32, 64
   storage:      string | null   // "512GB SSD", "1TB SSD"
   screen_in:    number | null   // 13.3, 14, 15.6, 16, 17.3
-  gpu:          string | null   // "RTX 4060", "RX 7600M", "Arc A530M"
+  screen_details: string | null // "IPS · FHD · 144Hz", etc.
+  front_camera: string | null   // "12MP Front Camera"
+  back_camera: string | null    // "12MP Back Camera"
+  connectivity: string | null   // "Wi-Fi 6"
+  color: string | null          // "Silver"
+  gpu:          string | null   // "NVIDIA GeForce RTX 4050 6144MB", etc.
+  gpu_family:   string | null   // "RTX 4050", "RX 7600M", "Arc A530M"
   has_dedicated_gpu: boolean    // true si tiene GPU dedicada
+}
+
+function cleanText(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[™®©°]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
 // ─── Normalizar texto (quita ™ ® © y acentos) ───────────────────────────────
 export function normalizeText(text: string): string {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')   // quitar acentos (é→e, á→a, etc.)
-    .replace(/[™®©°]/g, ' ')           // quitar símbolos trademark/copyright
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase()
+  return cleanText(text).toLowerCase()
 }
 
 // ─── Procesador ──────────────────────────────────────────────────────────────
-function extractProcessor(text: string): string | null {
+function extractProcessorFamily(text: string): string | null {
   const t = normalizeText(text)
 
   // Core Ultra (ej: "Core Ultra 9 275H", "Core Ultra 7 155U")
@@ -51,6 +61,17 @@ function extractProcessor(text: string): string | null {
   // Cortex (chips ARM en dispositivos ONN)
   const cortex = t.match(/\bcortex[-\s]*(a\d+)\b/i)
   if (cortex) return `Cortex ${cortex[1].toUpperCase()}`
+
+  // Apple Silicon / Bionic / A-series
+  if (/\bapple\s*m4\b/.test(t)) return 'Apple M4'
+  if (/\bapple\s*m3\b/.test(t)) return 'Apple M3'
+  if (/\bapple\s*m2\b/.test(t)) return 'Apple M2'
+  if (/\bapple\s*m1\b/.test(t)) return 'Apple M1'
+  if (/\bapple\s*a18\b/.test(t)) return 'Apple A18'
+  if (/\bapple\s*a17\b/.test(t)) return 'Apple A17'
+  if (/\bapple\s*a16\b/.test(t)) return 'Apple A16'
+  if (/\bapple\s*a15\b/.test(t)) return 'Apple A15'
+  if (/\bapple\s*a14\b/.test(t)) return 'Apple A14'
 
   return null
 }
@@ -101,6 +122,21 @@ function extractStorage(text: string): string | null {
     if (val >= 64) return `${val}GB SSD`
   }
 
+  // Apple / tablets: "A16 128GB 11"..." o "M2 256GB ..."
+  const standaloneGb = t.match(/\b(?:apple\s+)?(?:a1[4-8]|m[1-4])\s+(\d+)\s*gb\b/i)
+  if (standaloneGb) {
+    const val = parseInt(standaloneGb[1], 10)
+    if (val >= 64) return `${val}GB`
+  }
+
+  // Fallback para tablets/dispositivos sin SSD explícito:
+  // elegir el mayor valor de GB si no parece RAM.
+  const gbValues = Array.from(t.matchAll(/\b(\d+)\s*gb\b/gi))
+    .map(match => parseInt(match[1], 10))
+    .filter(value => value >= 64)
+    .sort((a, b) => b - a)
+  if (gbValues.length > 0) return `${gbValues[0]}GB`
+
   return null
 }
 
@@ -129,8 +165,124 @@ function extractScreen(text: string): number | null {
   return null
 }
 
+function extractProcessor(text: string): string | null {
+  const source = cleanText(text)
+
+  let match = source.match(/\b(AMD\s+)?Ryzen\s+AI\s+(9|7|5)\s+([0-9]{3,4}[A-Z]{0,3})\b/i)
+  if (match) return `AMD Ryzen AI ${match[2]} ${match[3].toUpperCase()}`
+
+  match = source.match(/\b(AMD\s+)?Ryzen\s+(9|7|5)\s+([0-9]{3,4}[A-Z]{0,3})\b/i)
+  if (match) return `AMD Ryzen ${match[2]} ${match[3].toUpperCase()}`
+
+  match = source.match(/\b(Intel\s+)?Core\s+Ultra\s+(9|7|5)\s+([0-9]{3,4}[A-Z]{0,3})\b/i)
+  if (match) return `Intel Core Ultra ${match[2]} ${match[3].toUpperCase()}`
+
+  match = source.match(/\b(Intel\s+)?Core\s*i(9|7|5|3)\s*-?\s*([0-9]{4,5}[A-Z]{0,3})\b/i)
+  if (match) return `Intel Core i${match[2]}-${match[3].toUpperCase()}`
+
+  match = source.match(/\bCore\s+(9|7|5)\s+([0-9]{3,4}[A-Z]{0,3})\b/i)
+  if (match) return `Intel Core ${match[1]} ${match[2].toUpperCase()}`
+
+  match = source.match(/\bCortex[-\s]*(A\d+)\b/i)
+  if (match) return `Cortex ${match[1].toUpperCase()}`
+
+  match = source.match(/\bApple\s+(M[1-4]|A1[4-8])\b/i)
+  if (match) return `Apple ${match[1].toUpperCase()}`
+
+  return extractProcessorFamily(text)
+}
+
+function extractScreenDetails(text: string): string | null {
+  const t = normalizeText(text)
+  const source = cleanText(text)
+  const details: string[] = []
+
+  const resolution = source.match(/\b(\d{3,4}\s*x\s*\d{3,4})\b/i)
+  if (resolution) details.push(`(${resolution[1].replace(/\s+/g, '')})`)
+
+  if (/\bliquid retina xdr\b/.test(t)) details.push('Liquid Retina XDR')
+  else if (/\bliquid retina\b/.test(t)) details.push('Liquid Retina')
+  else if (/\bretina\b/.test(t)) details.push('Retina')
+  else if (/\bsuper retina xdr\b/.test(t)) details.push('Super Retina XDR')
+
+  if (/\boled\b/.test(t)) details.push('OLED')
+  else if (/\bips\b/.test(t)) details.push('IPS')
+  else if (/\bled\b/.test(t)) details.push('LED')
+
+  if (/\b4k\b|\buhd\b/.test(t)) details.push('UHD')
+  else if (/\b3k\b/.test(t)) details.push('3K')
+  else if (/\b2\.?8k\b/.test(t)) details.push('2.8K')
+  else if (/\b2k\b|\bqhd\b/.test(t)) details.push('QHD')
+  else if (/\bwuxga\b/.test(t)) details.push('WUXGA')
+  else if (/\bfhd\b|\bfull hd\b/.test(t)) details.push('FHD')
+  else if (/\bhd\b/.test(t)) details.push('HD')
+
+  const hz = t.match(/(\d{2,3})\s*hz\b/)
+  if (hz) details.push(`${hz[1]}Hz`)
+
+  if (/\btouch\b|\btactil\b/.test(t)) details.push('Touch')
+  if (/\banti-?glare\b/.test(t)) details.push('Anti-glare')
+
+  return details.length > 0 ? details.join(' · ') : null
+}
+
+function extractFrontCamera(text: string): string | null {
+  const source = cleanText(text)
+  const match = source.match(/\b(\d{1,3}\s*MP)\s*Front\s*Camera\b/i)
+  return match ? `${match[1].toUpperCase().replace(/\s+/g, '')} Front Camera` : null
+}
+
+function extractBackCamera(text: string): string | null {
+  const source = cleanText(text)
+  const match = source.match(/\b(\d{1,3}\s*MP)\s*Back\s*Camera\b/i)
+  return match ? `${match[1].toUpperCase().replace(/\s+/g, '')} Back Camera` : null
+}
+
+function extractConnectivity(text: string): string | null {
+  const source = cleanText(text)
+  const wifi = source.match(/\bWi-?Fi\s*(6E|6|7|5)\b/i)
+  if (wifi) return `Wi-Fi ${wifi[1].toUpperCase()}`
+  return null
+}
+
+function extractColor(text: string): string | null {
+  const source = cleanText(text)
+  const colors = [
+    'Silver',
+    'Space Gray',
+    'Gray',
+    'Midnight',
+    'Starlight',
+    'Blue',
+    'Purple',
+    'Pink',
+    'Yellow',
+    'Black',
+    'White',
+    'Green',
+    'Rose Gold',
+    'Gold',
+    'Jaegar Gray',
+  ]
+
+  for (const color of colors) {
+    const pattern = new RegExp(`\\b${color.replace(/\s+/g, '\\s+')}\\b`, 'i')
+    if (pattern.test(source)) return color
+  }
+
+  const trailingColor = source.match(/\b([A-Z][A-Z\s]{2,20})$/)
+  if (trailingColor) {
+    return trailingColor[1]
+      .trim()
+      .toLowerCase()
+      .replace(/\b\w/g, char => char.toUpperCase())
+  }
+
+  return null
+}
+
 // ─── GPU dedicada ────────────────────────────────────────────────────────────
-function extractGpu(text: string): string | null {
+function extractGpuFamily(text: string): string | null {
   const t = normalizeText(text)
 
   // NVIDIA RTX / GTX
@@ -148,19 +300,65 @@ function extractGpu(text: string): string | null {
   return null
 }
 
+function extractGpu(text: string): string | null {
+  const source = cleanText(text)
+
+  let match = source.match(/\b(NVIDIA(?:\s+GeForce)?|GeForce|RTX|GTX)\s*(RTX|GTX)?\s*(\d{3,4}(?:\s*TI|TI)?[A-Z]*)\s*(\d{3,5}\s*(?:MB|GB))?\b/i)
+  if (match) {
+    const family = (match[2] || (/gtx/i.test(match[1]) ? 'GTX' : 'RTX')).toUpperCase()
+    const memory = match[4] ? ` ${match[4].toUpperCase().replace(/\s+/g, '')}` : ''
+    return `NVIDIA GeForce ${family} ${match[3].toUpperCase().replace(/\s+/g, '')}${memory}`
+  }
+
+  match = source.match(/\b(AMD\s+)?(?:Radeon\s+)?RX\s*(\d{3,4}[A-Z]*)\s*(\d{1,2}\s*(?:GB|MB))?\b/i)
+  if (match) {
+    const memory = match[3] ? ` ${match[3].toUpperCase().replace(/\s+/g, '')}` : ''
+    return `AMD Radeon RX ${match[2].toUpperCase()}${memory}`
+  }
+
+  match = source.match(/\bIntel\s+Arc\s*(A\d{3}[A-Z]*)\s*(\d{1,2}\s*(?:GB|MB))?\b/i) || source.match(/\bArc\s*(A\d{3}[A-Z]*)\s*(\d{1,2}\s*(?:GB|MB))?\b/i)
+  if (match) {
+    const memory = match[2] ? ` ${match[2].toUpperCase().replace(/\s+/g, '')}` : ''
+    return `Intel Arc ${match[1].toUpperCase()}${memory}`
+  }
+
+  return extractGpuFamily(text)
+}
+
 // ─── Función principal ───────────────────────────────────────────────────────
 export function extractSpecs(descripcion: string | null): Specs {
   if (!descripcion) {
-    return { processor: null, ram_gb: null, storage: null, screen_in: null, gpu: null, has_dedicated_gpu: false }
+    return {
+      processor: null,
+      processor_family: null,
+      ram_gb: null,
+      storage: null,
+      screen_in: null,
+      screen_details: null,
+      front_camera: null,
+      back_camera: null,
+      connectivity: null,
+      color: null,
+      gpu: null,
+      gpu_family: null,
+      has_dedicated_gpu: false,
+    }
   }
 
   const gpu = extractGpu(descripcion)
   return {
     processor:         extractProcessor(descripcion),
+    processor_family:  extractProcessorFamily(descripcion),
     ram_gb:            extractRam(descripcion),
     storage:           extractStorage(descripcion),
     screen_in:         extractScreen(descripcion),
+    screen_details:    extractScreenDetails(descripcion),
+    front_camera:      extractFrontCamera(descripcion),
+    back_camera:       extractBackCamera(descripcion),
+    connectivity:      extractConnectivity(descripcion),
+    color:             extractColor(descripcion),
     gpu,
+    gpu_family:        extractGpuFamily(descripcion),
     has_dedicated_gpu: gpu !== null,
   }
 }
