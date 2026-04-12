@@ -30,6 +30,9 @@ export const metadata: Metadata = {
     title: `${storeName} | Laptops nuevas y reacondicionadas`,
     description: `Catálogo online con laptops publicadas, filtros útiles y contacto directo.`,
   },
+  other: {
+    'facebook-domain-verification': '9qg2orkrxz8o02m0jywlrtm96c42vm',
+  },
 }
 
 export default function RootLayout({
