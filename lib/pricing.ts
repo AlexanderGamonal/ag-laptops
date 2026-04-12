@@ -2,6 +2,7 @@ import { extractSpecs, normalizeText } from "@/lib/spec-extractor";
 
 export const IGV_RATE = 0.18;
 export const COMMISSION_RATE = 0.99;
+export const TC_USD_TO_PEN = 3.5;
 
 type PriceableProduct = {
   descripcion?: string | null;
@@ -23,7 +24,7 @@ function isLaptopProduct(product?: PriceableProduct): boolean {
   }
 
   if (
-    /\b(laptop|notebook|ultrabook|chromebook|macbook|thinkpad|ideapad|vivobook|zenbook|elitebook|probook|zbook|latitude|inspiron|xps|pavilion|omen|victus|aspire|swift|travelmate|nitro|predator|tuf|rog|raider|stealth|katana|modern|gram)\b/.test(
+    /\b(laptop|notebook|ultrabook|chromebook|macbook|thinkpad|ideapad|vivobook|zenbook|elitebook|probook|zbook|latitude|inspiron|xps|pavilion|omen|victus|aspire|swift|travelmate|nitro|predator|tuf|rog|raider|stealth|katana|modern|gram|legion|zephyrus|scar|strix|creator|bravo|alpha|sword|crosshair|katana|gaming)\b/.test(
       normalized,
     )
   ) {
@@ -68,10 +69,10 @@ export function calcSellingPrice(
   const precioFinal =
     ((precioBaseSinIgv + utilidadNeta) / COMMISSION_RATE) * (1 + IGV_RATE);
 
-  return Math.ceil(precioFinal);
+  return Math.ceil(precioFinal * TC_USD_TO_PEN);
 }
 
-/** Formatea un precio en USD para mostrar al cliente. */
+/** Formatea un precio en PEN para mostrar al cliente. */
 export function formatPrice(
   price: number | null,
   fallback = "Consultar precio",
@@ -79,7 +80,7 @@ export function formatPrice(
   if (price === null) return fallback;
   return new Intl.NumberFormat("es-PE", {
     style: "currency",
-    currency: "USD",
+    currency: "PEN",
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(price);

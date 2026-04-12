@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { getBrowserSupabase, type Laptop } from '@/lib/supabase'
-import { formatPrice, formatSellingPrice } from '@/lib/pricing'
+import { formatPrice, formatSellingPrice, TC_USD_TO_PEN } from '@/lib/pricing'
 
 export default function AdminDashboard() {
   const [laptops,  setLaptops]  = useState<Laptop[]>([])
@@ -240,7 +240,7 @@ export default function AdminDashboard() {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="font-semibold text-blue-700">{formatSellingPrice(laptop.precio, laptop)}</span>
-                        <span className="block text-xs text-slate-400">{formatPrice(laptop.precio)} proveedor</span>
+                        <span className="block text-xs text-slate-400">{formatPrice((laptop.precio ?? 0) * TC_USD_TO_PEN)} proveedor</span>
                       </td>
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{laptop.condicion || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{laptop.estado || '—'}</td>

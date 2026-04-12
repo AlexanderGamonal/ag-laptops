@@ -1,7 +1,8 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
+import Script from 'next/script'
 import ProductDetailClient from '@/components/ProductDetailClient'
-import { formatSellingPrice } from '@/lib/pricing'
+import { calcSellingPrice, formatSellingPrice } from '@/lib/pricing'
 import { getPublicLaptopById } from '@/lib/store-data'
 import { getSiteUrl, getStoreEmail, getStoreName, getWhatsAppNumber } from '@/lib/server-env'
 import { extractLaptopIdFromRouteParam, getLaptopHref } from '@/lib/laptop-slug'
@@ -66,11 +67,46 @@ export default async function LaptopDetailPage({ params }: { params: { id: strin
     redirect(canonicalHref)
   }
 
+  const sellingPrice = laptop.precio ? calcSellingPrice(laptop.precio, laptop) : null
+  const image = laptop.foto_1 || laptop.foto_2 || laptop.foto_3
+  const url = `${getSiteUrl()}${getLaptopHref(laptop)}`
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: laptop.descripcion || laptop.numero_parte,
+    description: laptop.descripcion || undefined,
+    image: image ? [image] : undefined,
+    brand: laptop.marca ? { '@type': 'Brand', name: laptop.marca } : undefined,
+    sku: laptop.numero_parte,
+    offers: {
+      '@type': 'Offer',
+      url,
+      priceCurrency: 'PEN',
+      price: sellingPrice ?? undefined,
+      availability:
+        laptop.estado?.toLowerCase().includes('stock')
+          ? 'https://schema.org/InStock'
+          : 'https://schema.org/PreOrder',
+      itemCondition:
+        laptop.condicion?.toLowerCase() === 'nuevo'
+          ? 'https://schema.org/NewCondition'
+          : 'https://schema.org/RefurbishedCondition',
+    },
+  }
+
   return (
-    <ProductDetailClient
-      laptop={laptop}
-      whatsappNumber={getWhatsAppNumber()}
-      contactEmail={getStoreEmail()}
-    />
+    <>
+      <Script
+        id="product-jsonld"
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ProductDetailClient
+        laptop={laptop}
+        whatsappNumber={getWhatsAppNumber()}
+        contactEmail={getStoreEmail()}
+      />
+    </>
   )
 }
