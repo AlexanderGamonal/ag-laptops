@@ -51,15 +51,13 @@ function clean(value: unknown): string | null {
 }
 
 // ─── Detectar si una fila es un producto real ────────────────────────────────
-// Un producto tiene: CODIGO que empieza con letra (W06264, MD4E4LL/A, etc.) y precio numérico
+// Un producto tiene: CODIGO que empieza con W (ej. W06264) y precio numérico
 function isProductRow(row: unknown[]): boolean {
   const col0 = clean(row[0])
   const col3 = row[3]
   if (!col0) return false
-  // Aceptar cualquier código que empiece con letra (excluye números puros y filas corruptas)
-  if (!/^[A-Za-z]/i.test(col0)) return false
-  // Excluir filas de encabezado (CODIGO, PART NUMBER, DESCRIPCION...)
-  if (/^(codigo|part\s*number|descripcion|precio|condicion|status|disponib)/i.test(col0)) return false
+  // El CODIGO siempre empieza con W seguido de dígitos
+  if (!/^W\d{4,6}$/i.test(col0)) return false
   const price = parsePrice(col3)
   return price !== null
 }
