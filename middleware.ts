@@ -10,11 +10,13 @@ export function middleware(request: NextRequest) {
 
   const hasSession = Boolean(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)
 
+  const publicAdminPaths = ['/admin/login', '/admin/reset-password']
+
   if (pathname === '/admin/login' && hasSession) {
     return NextResponse.redirect(new URL('/admin', request.url))
   }
 
-  if (pathname !== '/admin/login' && !hasSession) {
+  if (!publicAdminPaths.includes(pathname) && !hasSession) {
     return NextResponse.redirect(new URL('/admin/login', request.url))
   }
 
