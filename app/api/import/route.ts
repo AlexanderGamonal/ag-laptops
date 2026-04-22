@@ -152,9 +152,10 @@ export async function POST(request: NextRequest) {
       errors: importErrors,
     })
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
     console.error('[/api/import]', err)
     return NextResponse.json(
-      { error: 'Error interno al procesar el archivo.' },
+      { error: `Error interno: ${message}` },
       { status: 500 }
     )
   }
