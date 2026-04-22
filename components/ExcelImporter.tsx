@@ -7,7 +7,8 @@ type ImportResult = {
   success: boolean
   total: number
   inserted: number
-  updated: number
+  skipped: number
+  deleted: number
   errors: string[]
 }
 
@@ -115,12 +116,13 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
             <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            <p className="font-semibold text-green-800">Importación completada</p>
+            <p className="font-semibold text-green-800">Sincronización completada</p>
           </div>
-          <div className="grid grid-cols-3 gap-3 mt-1">
-            <Stat label="Total" value={result.total} color="text-slate-700" />
-            <Stat label="Nuevas" value={result.inserted} color="text-green-700" />
-            <Stat label="Actualizadas" value={result.updated} color="text-blue-700" />
+          <div className="grid grid-cols-4 gap-3 mt-1">
+            <Stat label="Total Excel"  value={result.total}    color="text-slate-700" />
+            <Stat label="Nuevas"       value={result.inserted} color="text-green-700" />
+            <Stat label="Sin cambios"  value={result.skipped}  color="text-blue-700"  />
+            <Stat label="Eliminadas"   value={result.deleted}  color="text-red-700"   />
           </div>
           {result.errors.length > 0 && (
             <div className="mt-2 rounded-xl bg-yellow-50 border border-yellow-200 p-3">

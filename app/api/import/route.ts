@@ -48,49 +48,107 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
     let inserted = 0
-    let updated = 0
+    let skipped = 0
+    let deleted = 0
     const importErrors: string[] = [...errors]
 
-    // Upsert en lotes de 50
+    // Deduplicar filas por numero_parte (conservar primera ocurrencia)
+    const seenParts = new Set<string>()
+    const dedupedRows = rows.filter((r: { numero_parte: string }) => {
+      if (seenParts.has(r.numero_parte)) return false
+      seenParts.add(r.numero_parte)
+      return true
+    })
+
+    const excelParts = seenParts
+
+    // ── FASE 1: Solo insertar registros nuevos ──────────────────────────────
     const BATCH_SIZE = 50
-    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-      const batch = rows.slice(i, i + BATCH_SIZE)
+    for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
+      const batch = dedupedRows.slice(i, i + BATCH_SIZE)
       const batchParts = batch.map((r: { numero_parte: string }) => r.numero_parte)
 
-      // Determinar cuáles ya existen ANTES del upsert
       const { data: existing } = await supabase
         .from('laptops')
         .select('numero_parte')
         .in('numero_parte', batchParts)
 
-      const existingSet = new Set((existing || []).map((r: { numero_parte: string }) => r.numero_parte))
+      const existingSet = new Set(
+        (existing || []).map((r: { numero_parte: string }) => r.numero_parte)
+      )
 
-      const { error } = await supabase
-        .from('laptops')
-        .upsert(batch, {
-          onConflict: 'numero_parte',
-          ignoreDuplicates: false,
-        })
+      const toInsert = batch.filter(
+        (r: { numero_parte: string }) => !existingSet.has(r.numero_parte)
+      )
+
+      skipped += batchParts.length - toInsert.length
+
+      if (toInsert.length === 0) continue
+
+      const { error } = await supabase.from('laptops').insert(toInsert)
 
       if (error) {
         importErrors.push(`Error en lote ${Math.floor(i / BATCH_SIZE) + 1}: ${error.message}`)
         continue
       }
 
-      for (const part of batchParts) {
-        if (existingSet.has(part)) {
-          updated++
-        } else {
-          inserted++
+      inserted += toInsert.length
+    }
+
+    // ── FASE 2: Eliminar registros que no están en el Excel ─────────────────
+    const { data: allDbRecords, error: fetchError } = await supabase
+      .from('laptops')
+      .select('id, numero_parte')
+
+    if (fetchError) {
+      importErrors.push(`Error al obtener registros existentes: ${fetchError.message}`)
+    } else {
+      const toDelete = (allDbRecords || []).filter(
+        (r: { id: string; numero_parte: string }) => !excelParts.has(r.numero_parte)
+      )
+
+      for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+        const deleteBatch = toDelete.slice(i, i + BATCH_SIZE)
+        const idsToDelete = deleteBatch.map((r: { id: string }) => r.id)
+        const partsToDelete = deleteBatch.map((r: { numero_parte: string }) => r.numero_parte)
+
+        const EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+        const storagePaths = partsToDelete.flatMap((part: string) => {
+          const safePart = part.replace(/[^a-zA-Z0-9-_]/g, '_')
+          return [1, 2, 3].flatMap(slot =>
+            EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
+          )
+        })
+
+        const { error: storageError } = await supabase.storage
+          .from('laptop-photos')
+          .remove(storagePaths)
+        if (storageError) {
+          importErrors.push(`Advertencia al limpiar fotos: ${storageError.message}`)
         }
+
+        const { error: deleteError } = await supabase
+          .from('laptops')
+          .delete()
+          .in('id', idsToDelete)
+
+        if (deleteError) {
+          importErrors.push(
+            `Error al eliminar obsoletos (lote ${Math.floor(i / BATCH_SIZE) + 1}): ${deleteError.message}`
+          )
+          continue
+        }
+
+        deleted += deleteBatch.length
       }
     }
 
     return NextResponse.json({
       success: true,
-      total: rows.length,
+      total: dedupedRows.length,
       inserted,
-      updated,
+      skipped,
+      deleted,
       errors: importErrors,
     })
   } catch (err) {
