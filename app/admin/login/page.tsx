@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase'
 
 const storeName = process.env.NEXT_PUBLIC_STORE_NAME || 'TechLaptops'
@@ -104,6 +105,9 @@ export default function LoginPage() {
           >
             {loading ? 'Iniciando sesión...' : 'Iniciar sesión'}
           </button>
+          <Link href="/admin/reset-password" className="text-center text-sm text-slate-500 hover:text-blue-600 transition-colors">
+            ¿Olvidaste tu contraseña?
+          </Link>
         </form>
       </div>
     </div>
