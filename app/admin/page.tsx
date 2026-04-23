@@ -16,6 +16,14 @@ export default function AdminDashboard() {
   const [confirmId,    setConfirmId]    = useState<string | null>(null)
   const [deleteError,  setDeleteError]  = useState<string | null>(null)
 
+  type CleanupStep = 'idle' | 'loading' | 'preview' | 'executing' | 'done'
+  type CleanupPreview = { byBrand: Record<string, number>; total: number; toFix: number }
+  type CleanupResult  = { deleted: number; fixed: number; deletedBrands: string[] }
+  const [cleanupStep,    setCleanupStep]    = useState<CleanupStep>('idle')
+  const [cleanupPreview, setCleanupPreview] = useState<CleanupPreview | null>(null)
+  const [cleanupResult,  setCleanupResult]  = useState<CleanupResult | null>(null)
+  const [cleanupError,   setCleanupError]   = useState<string | null>(null)
+
   async function getAuthHeader(): Promise<Record<string, string>> {
     const supabase = getBrowserSupabase()
     const { data } = await supabase.auth.getSession()
@@ -35,6 +43,41 @@ export default function AdminDashboard() {
   }, [])
 
   useEffect(() => { fetchLaptops() }, [fetchLaptops])
+
+  async function handleCleanupPreview() {
+    setCleanupStep('loading')
+    setCleanupError(null)
+    setCleanupPreview(null)
+    setCleanupResult(null)
+    try {
+      const authHeader = await getAuthHeader()
+      const res = await fetch('/api/admin/cleanup-brands', { headers: authHeader })
+      const data = await res.json()
+      if (!res.ok) { setCleanupError(data.error || 'Error al obtener vista previa.'); setCleanupStep('idle'); return }
+      setCleanupPreview(data)
+      setCleanupStep('preview')
+    } catch {
+      setCleanupError('Error de red.')
+      setCleanupStep('idle')
+    }
+  }
+
+  async function handleCleanupExecute() {
+    setCleanupStep('executing')
+    setCleanupError(null)
+    try {
+      const authHeader = await getAuthHeader()
+      const res = await fetch('/api/admin/cleanup-brands', { method: 'POST', headers: authHeader })
+      const data = await res.json()
+      if (!res.ok) { setCleanupError(data.error || 'Error al limpiar.'); setCleanupStep('preview'); return }
+      setCleanupResult(data)
+      setCleanupStep('done')
+      fetchLaptops()
+    } catch {
+      setCleanupError('Error de red.')
+      setCleanupStep('preview')
+    }
+  }
 
   async function deleteLaptop(id: string) {
     setDeleting(id)
@@ -93,6 +136,101 @@ export default function AdminDashboard() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      {/* Modal limpieza de marcas */}
+      {cleanupStep !== 'idle' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full mx-4">
+            {(cleanupStep === 'loading' || cleanupStep === 'executing') && (
+              <div className="flex flex-col items-center gap-3 py-4">
+                <svg className="animate-spin w-8 h-8 text-blue-500" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <p className="text-slate-600 text-sm">{cleanupStep === 'loading' ? 'Analizando catálogo…' : 'Limpiando marcas…'}</p>
+              </div>
+            )}
+
+            {cleanupStep === 'preview' && cleanupPreview && (
+              <>
+                <h2 className="text-lg font-bold text-slate-900 mb-1">Limpiar marcas</h2>
+                <p className="text-slate-500 text-sm mb-4">
+                  Se conservarán solo: Lenovo, HP, Asus, Acer, Dell, MSI, Apple.
+                </p>
+                {cleanupPreview.total === 0 && cleanupPreview.toFix === 0 ? (
+                  <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-xl px-3 py-2 mb-4">
+                    El catálogo ya está limpio. No hay productos de otras marcas.
+                  </p>
+                ) : (
+                  <div className="mb-4 space-y-2">
+                    {cleanupPreview.total > 0 && (
+                      <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                        <p className="text-xs font-semibold text-red-700 mb-1">Se eliminarán {cleanupPreview.total} productos:</p>
+                        {Object.entries(cleanupPreview.byBrand).map(([brand, count]) => (
+                          <p key={brand} className="text-xs text-red-600">{brand}: {count} equipo{count !== 1 ? 's' : ''}</p>
+                        ))}
+                      </div>
+                    )}
+                    {cleanupPreview.toFix > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                        <p className="text-xs text-amber-700">{cleanupPreview.toFix} nombres con error ortográfico serán corregidos.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {cleanupError && <p className="text-xs text-red-600 mb-3">{cleanupError}</p>}
+                <div className="flex gap-3">
+                  <button onClick={() => setCleanupStep('idle')} className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 font-medium text-sm hover:bg-slate-50 transition-colors">
+                    Cancelar
+                  </button>
+                  {(cleanupPreview.total > 0 || cleanupPreview.toFix > 0) && (
+                    <button onClick={handleCleanupExecute} className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white font-semibold text-sm hover:bg-red-700 transition-colors">
+                      Confirmar
+                    </button>
+                  )}
+                  {cleanupPreview.total === 0 && cleanupPreview.toFix === 0 && (
+                    <button onClick={() => setCleanupStep('idle')} className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors">
+                      Cerrar
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+
+            {cleanupStep === 'done' && cleanupResult && (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
+                    <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h2 className="text-lg font-bold text-slate-900">Limpieza completada</h2>
+                </div>
+                <div className="space-y-1.5 mb-4">
+                  {cleanupResult.deleted > 0 && (
+                    <p className="text-sm text-slate-700">
+                      <span className="font-semibold text-red-600">{cleanupResult.deleted}</span> productos eliminados
+                      {cleanupResult.deletedBrands.length > 0 && ` (${cleanupResult.deletedBrands.join(', ')})`}
+                    </p>
+                  )}
+                  {cleanupResult.fixed > 0 && (
+                    <p className="text-sm text-slate-700">
+                      <span className="font-semibold text-amber-600">{cleanupResult.fixed}</span> nombres corregidos
+                    </p>
+                  )}
+                  {cleanupResult.deleted === 0 && cleanupResult.fixed === 0 && (
+                    <p className="text-sm text-slate-500">No se realizaron cambios.</p>
+                  )}
+                </div>
+                <button onClick={() => setCleanupStep('idle')} className="w-full px-4 py-2.5 rounded-xl bg-blue-600 text-white font-semibold text-sm hover:bg-blue-700 transition-colors">
+                  Cerrar
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Modal de confirmación de eliminación */}
       {confirmId && confirmLaptop && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
@@ -134,16 +272,27 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-slate-500 text-sm mt-0.5">Gestiona tu inventario de laptops</p>
         </div>
-        <Link
-          href="/admin/import"
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors text-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-          </svg>
-          Importar Excel
-        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleCleanupPreview}
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 text-slate-700 font-semibold rounded-xl hover:bg-slate-200 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
+            </svg>
+            Limpiar marcas
+          </button>
+          <Link
+            href="/admin/import"
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-colors text-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Importar Excel
+          </Link>
+        </div>
       </div>
 
       {/* Stats */}
