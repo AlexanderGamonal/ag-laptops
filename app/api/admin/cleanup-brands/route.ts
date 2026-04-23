@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const uniqueDeletedBrands = [...new Set(deletedBrands)].sort()
+  const uniqueDeletedBrands = Array.from(new Set(deletedBrands)).sort()
 
   return NextResponse.json({ fixed, deleted, deletedBrands: uniqueDeletedBrands })
 }
