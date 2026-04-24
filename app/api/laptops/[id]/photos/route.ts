@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
+import sharp from 'sharp'
 
 const BUCKET = 'laptop-photos'
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 const MAX_SIZE_MB = 5
+const ALL_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
 export async function POST(
   request: NextRequest,
@@ -62,16 +64,21 @@ export async function POST(
       return NextResponse.json({ error: 'Laptop no encontrada.' }, { status: 404 })
     }
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg'
     const safePart = laptop.numero_parte.replace(/[^a-zA-Z0-9-_]/g, '_')
-    const storagePath = `${safePart}/foto-${slot}.${ext}`
+    const storagePath = `${safePart}/foto-${slot}.webp`
 
-    // Subir al bucket (upsert = reemplaza si ya existe)
-    const buffer = Buffer.from(await file.arrayBuffer())
+    // Borrar todas las extensiones anteriores del slot antes de subir
+    const oldPaths = ALL_EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
+    await supabase.storage.from(BUCKET).remove(oldPaths)
+
+    // Convertir a WebP y subir
+    const rawBuffer = Buffer.from(await file.arrayBuffer())
+    const webpBuffer = await sharp(rawBuffer).webp({ quality: 85 }).toBuffer()
+
     const { error: uploadError } = await supabase.storage
       .from(BUCKET)
-      .upload(storagePath, buffer, {
-        contentType: file.type,
+      .upload(storagePath, webpBuffer, {
+        contentType: 'image/webp',
         upsert: true,
       })
 

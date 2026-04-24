@@ -12,6 +12,7 @@ export type ExcelRow = {
 
 // ─── Detectar marca desde la descripción ────────────────────────────────────
 const BRAND_RULES: Array<{ test: RegExp; brand: string }> = [
+  { test: /\bAMAZON\b|\bKINDLE\b|\bAMAZON\s*BASICS\b|\bFIRE\s*HD\b|\bFIRE\s*HDX\b/i, brand: 'Amazon' },
   { test: /\bLENOVO\b/i,            brand: 'Lenovo'  },
   { test: /\bASUS\b/i,              brand: 'Asus'    },
   { test: /\bDELL\b/i,              brand: 'Dell'    },
