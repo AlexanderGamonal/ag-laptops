@@ -38,20 +38,17 @@ export async function GET(request: NextRequest) {
     byBrand[m] = (byBrand[m] ?? 0) + 1
   }
 
-  // Contar registros con capitalización incorrecta
-  let toFix = 0
-  for (const wrong of Object.keys(BRAND_FIXES)) {
-    const { count } = await supabase
-      .from('laptops')
-      .select('id', { count: 'exact', head: true })
-      .eq('marca', wrong)
-    toFix += count ?? 0
-  }
+  // Contar registros con capitalización incorrecta en una sola query
+  const wrongKeys = Object.keys(BRAND_FIXES)
+  const { count: toFix } = await supabase
+    .from('laptops')
+    .select('id', { count: 'exact', head: true })
+    .in('marca', wrongKeys)
 
   return NextResponse.json({
     toDelete: toDelete || [],
     byBrand,
-    toFix,
+    toFix: toFix ?? 0,
     total: toDelete?.length ?? 0,
   })
 }

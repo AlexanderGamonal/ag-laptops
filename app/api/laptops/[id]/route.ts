@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase'
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await requireAdminRequest(request)
@@ -12,6 +12,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
+    const { id } = await params
     const body = await request.json()
     const supabase = createAdminClient()
 
@@ -28,7 +29,7 @@ export async function PATCH(
     const { data, error } = await supabase
       .from('laptops')
       .update(updates)
-      .eq('id', params.id)
+      .eq('id', id)
       .select()
       .single()
 
@@ -44,22 +45,22 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: NextRequest,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const admin = await requireAdminRequest(_request)
+    const admin = await requireAdminRequest(request)
     if (!admin) {
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
+    const { id } = await params
     const supabase = createAdminClient()
 
-    // Obtener numero_parte para limpiar fotos del storage
     const { data: laptop } = await supabase
       .from('laptops')
       .select('numero_parte')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (laptop?.numero_parte) {
@@ -74,7 +75,7 @@ export async function DELETE(
     const { error } = await supabase
       .from('laptops')
       .delete()
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

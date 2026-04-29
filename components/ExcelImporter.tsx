@@ -3,23 +3,27 @@
 import { useState, useRef } from 'react'
 import { getBrowserSupabase } from '@/lib/supabase'
 
+type PendingDeletion = { id: string; numero_parte: string }
+
 type ImportResult = {
   success: boolean
   total: number
   inserted: number
   skipped: number
   deleted: number
+  pendingDeletion?: PendingDeletion[]
   errors: string[]
 }
 
 export default function ExcelImporter({ onImportComplete }: { onImportComplete?: () => void }) {
-  const [loading, setLoading]   = useState(false)
-  const [result, setResult]     = useState<ImportResult | null>(null)
-  const [error, setError]       = useState<string | null>(null)
-  const [dragOver, setDragOver] = useState(false)
+  const [loading, setLoading]         = useState(false)
+  const [result, setResult]           = useState<ImportResult | null>(null)
+  const [error, setError]             = useState<string | null>(null)
+  const [dragOver, setDragOver]       = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  async function handleUpload(file: File) {
+  async function upload(file: File, confirmDelete = false) {
     setLoading(true)
     setError(null)
     setResult(null)
@@ -29,6 +33,7 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
       const token = sessionData.session?.access_token
       const formData = new FormData()
       formData.append('file', file)
+      if (confirmDelete) formData.append('confirm_delete', 'true')
 
       const res = await fetch('/api/import', {
         method: 'POST',
@@ -39,12 +44,21 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
 
       if (!res.ok) {
         setError(data.error || 'Error al importar el archivo.')
+        setPendingFile(null)
       } else {
-        setResult(data)
-        onImportComplete?.()
+        const importResult = data as ImportResult
+        const hasPending = (importResult.pendingDeletion?.length ?? 0) > 0
+        if (!confirmDelete && hasPending) {
+          setPendingFile(file)
+        } else {
+          setPendingFile(null)
+          onImportComplete?.()
+        }
+        setResult(importResult)
       }
     } catch {
       setError('Error de red al subir el archivo.')
+      setPendingFile(null)
     } finally {
       setLoading(false)
       if (inputRef.current) inputRef.current.value = ''
@@ -53,15 +67,28 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) handleUpload(file)
+    if (file) upload(file)
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
     setDragOver(false)
     const file = e.dataTransfer.files?.[0]
-    if (file) handleUpload(file)
+    if (file) upload(file)
   }
+
+  function handleConfirmDelete() {
+    if (pendingFile) upload(pendingFile, true)
+  }
+
+  function handleCancelDelete() {
+    setPendingFile(null)
+    setResult(prev => prev ? { ...prev, pendingDeletion: [] } : prev)
+    onImportComplete?.()
+  }
+
+  const pendingDeletion = result?.pendingDeletion ?? []
+  const awaitingConfirm = pendingFile !== null && pendingDeletion.length > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,9 +97,9 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
         onDragOver={e => { e.preventDefault(); setDragOver(true) }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
-        onClick={() => !loading && inputRef.current?.click()}
+        onClick={() => !loading && !awaitingConfirm && inputRef.current?.click()}
         className={`relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center gap-3 cursor-pointer transition-colors
-          ${loading ? 'opacity-60 pointer-events-none' : ''}
+          ${loading || awaitingConfirm ? 'opacity-60 pointer-events-none' : ''}
           ${dragOver ? 'border-blue-500 bg-blue-50' : 'border-slate-300 bg-slate-50 hover:border-blue-400 hover:bg-blue-50'}`}
       >
         {loading ? (
@@ -109,8 +136,67 @@ export default function ExcelImporter({ onImportComplete }: { onImportComplete?:
         onChange={handleFileChange}
       />
 
-      {/* Resultado de importación */}
-      {result && (
+      {/* Confirmación de eliminación */}
+      {awaitingConfirm && result && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 p-5 flex flex-col gap-3">
+          <div className="flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <div>
+              <p className="font-semibold text-amber-800">
+                {pendingDeletion.length} producto{pendingDeletion.length !== 1 ? 's' : ''} no están en el Excel
+              </p>
+              <p className="text-sm text-amber-700 mt-0.5">
+                Revisa la lista antes de confirmar. Esta acción no se puede deshacer.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <Stat label="Total Excel"  value={result.total}    color="text-slate-700" />
+            <Stat label="Nuevas"       value={result.inserted} color="text-green-700" />
+            <Stat label="Sin cambios"  value={result.skipped}  color="text-blue-700"  />
+          </div>
+
+          <div className="rounded-xl bg-white border border-amber-200 max-h-44 overflow-y-auto">
+            {pendingDeletion.map(item => (
+              <div key={item.id} className="px-3 py-2 border-b border-amber-100 last:border-0 font-mono text-xs text-slate-600">
+                {item.numero_parte}
+              </div>
+            ))}
+          </div>
+
+          {result.errors.length > 0 && (
+            <div className="rounded-xl bg-yellow-50 border border-yellow-200 p-3">
+              <p className="text-xs font-semibold text-yellow-800 mb-1">Advertencias de parseo:</p>
+              {result.errors.map((e, i) => (
+                <p key={i} className="text-xs text-yellow-700">{e}</p>
+              ))}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={handleCancelDelete}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50 transition-colors disabled:opacity-50"
+            >
+              Cancelar eliminación
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={loading}
+              className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors disabled:opacity-50"
+            >
+              {loading ? 'Eliminando...' : `Eliminar ${pendingDeletion.length} producto${pendingDeletion.length !== 1 ? 's' : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Resultado final */}
+      {result && !awaitingConfirm && (
         <div className="rounded-2xl border border-green-200 bg-green-50 p-5 flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

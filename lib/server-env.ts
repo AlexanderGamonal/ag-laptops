@@ -42,3 +42,11 @@ export function getAdminEmails() {
     .map(email => email.trim().toLowerCase())
     .filter(Boolean)
 }
+
+export function getFbPixelId() {
+  return process.env.NEXT_PUBLIC_FB_PIXEL_ID || ''
+}
+
+export function getFbDomainVerification() {
+  return process.env.NEXT_PUBLIC_FB_DOMAIN_VERIFICATION || ''
+}

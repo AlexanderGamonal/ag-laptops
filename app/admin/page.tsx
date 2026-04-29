@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, startTransition } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { getBrowserSupabase, type Laptop } from '@/lib/supabase'
@@ -32,17 +32,20 @@ export default function AdminDashboard() {
   }
 
   const fetchLaptops = useCallback(async () => {
-    setLoading(true)
     const supabase = getBrowserSupabase()
     const { data } = await supabase
       .from('laptops')
       .select('*')
       .order('updated_at', { ascending: false })
-    setLaptops(data || [])
-    setLoading(false)
+    startTransition(() => {
+      setLaptops(data || [])
+      setLoading(false)
+    })
   }, [])
 
-  useEffect(() => { fetchLaptops() }, [fetchLaptops])
+  useEffect(() => {
+    fetchLaptops()
+  }, [fetchLaptops])
 
   async function handleCleanupPreview() {
     setCleanupStep('loading')

@@ -7,11 +7,11 @@ import { getPublicLaptopById } from '@/lib/store-data'
 import { getSiteUrl, getStoreEmail, getStoreName, getWhatsAppNumber } from '@/lib/server-env'
 import { extractLaptopIdFromRouteParam, getLaptopHref } from '@/lib/laptop-slug'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+export const revalidate = 60
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const laptopId = extractLaptopIdFromRouteParam(params.id)
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const { id } = await params
+  const laptopId = extractLaptopIdFromRouteParam(id)
 
   if (!laptopId) {
     return { title: `Producto no encontrado | ${getStoreName()}` }
@@ -49,8 +49,9 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   }
 }
 
-export default async function LaptopDetailPage({ params }: { params: { id: string } }) {
-  const laptopId = extractLaptopIdFromRouteParam(params.id)
+export default async function LaptopDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const laptopId = extractLaptopIdFromRouteParam(id)
 
   if (!laptopId) {
     notFound()
@@ -63,7 +64,7 @@ export default async function LaptopDetailPage({ params }: { params: { id: strin
   }
 
   const canonicalHref = getLaptopHref(laptop)
-  if (params.id !== canonicalHref.split('/').pop()) {
+  if (id !== canonicalHref.split('/').pop()) {
     redirect(canonicalHref)
   }
 

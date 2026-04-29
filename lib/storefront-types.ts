@@ -27,7 +27,7 @@ export type SelectFilterKey =
 export type EnrichedLaptop = {
   laptop: Laptop;
   specs: ReturnType<typeof extractSpecs>;
-  sellingPrice: number;
+  sellingPrice: number | null;
 };
 
 export type FilterOptions = {

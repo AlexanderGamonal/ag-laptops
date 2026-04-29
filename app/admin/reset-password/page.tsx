@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, startTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getBrowserSupabase } from '@/lib/supabase'
@@ -30,10 +30,10 @@ export default function ResetPasswordPage() {
     const hash = window.location.hash
     if (hash.includes('type=recovery') || (hash.includes('access_token') && hash.includes('recovery'))) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        setMode(session ? 'reset' : 'invalid')
+        startTransition(() => setMode(session ? 'reset' : 'invalid'))
       })
     } else if (!hash.includes('access_token')) {
-      setMode('request')
+      startTransition(() => setMode('request'))
     }
 
     return () => subscription.unsubscribe()

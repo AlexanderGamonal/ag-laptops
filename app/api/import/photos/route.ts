@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
@@ -29,18 +29,38 @@ type PhotoRow = {
   foto_3?: string
 }
 
-function parsePhotoImportBuffer(buffer: Buffer): { rows: PhotoRow[]; error?: string } {
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const sheet = workbook.Sheets[workbook.SheetNames[0]]
-  const raw: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
-    header: 1,
-    defval: '',
-    blankrows: false,
+function cellText(value: ExcelJS.CellValue): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'object') {
+    if ('result' in value) return cellText(value.result as ExcelJS.CellValue)
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((r: { text: string }) => r.text).join('')
+    }
+    if ('text' in value) return String(value.text)
+    if ('hyperlink' in value) return String(value.hyperlink)
+  }
+  return ''
+}
+
+async function parsePhotoImportBuffer(buffer: Buffer): Promise<{ rows: PhotoRow[]; error?: string }> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+
+  const ws = workbook.worksheets[0]
+  if (!ws) return { rows: [], error: 'El archivo está vacío o no tiene datos.' }
+
+  const raw: string[][] = []
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    const values = (row.values as ExcelJS.CellValue[]).slice(1)
+    raw.push(values.map(cellText))
   })
 
   if (raw.length < 2) return { rows: [], error: 'El archivo está vacío o no tiene datos.' }
 
-  const headers = (raw[0] as string[]).map(h => String(h).toLowerCase().trim())
+  const headers = raw[0].map(h => h.toLowerCase().trim())
 
   const parteIdx = headers.findIndex(h => PARTE_COLS.includes(h))
   if (parteIdx === -1) {
@@ -58,14 +78,14 @@ function parsePhotoImportBuffer(buffer: Buffer): { rows: PhotoRow[]; error?: str
 
   const rows: PhotoRow[] = []
   for (let i = 1; i < raw.length; i++) {
-    const row = raw[i] as unknown[]
-    const parte = String(row[parteIdx] ?? '').trim()
+    const row = raw[i]
+    const parte = row[parteIdx]?.trim() ?? ''
     if (!parte) continue
 
     const entry: PhotoRow = { numero_parte: parte }
     for (const slot of [1, 2, 3] as const) {
       if (fotoIdx[slot] !== undefined) {
-        const url = String(row[fotoIdx[slot]] ?? '').trim()
+        const url = row[fotoIdx[slot]]?.trim() ?? ''
         if (url) entry[`foto_${slot}`] = url
       }
     }
@@ -107,7 +127,7 @@ async function fetchImage(
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request)
-    const rl = rateLimit(`import-photos:${ip}`, 10, 10 * 60 * 1000)
+    const rl = await rateLimit(`import-photos:${ip}`, 10, 10 * 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Demasiadas solicitudes. Intenta en ${rl.retryAfterSeconds}s.` },
@@ -142,7 +162,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const { rows, error: parseError } = parsePhotoImportBuffer(buffer)
+    const { rows, error: parseError } = await parsePhotoImportBuffer(buffer)
     if (parseError) return NextResponse.json({ error: parseError }, { status: 422 })
     if (rows.length === 0) {
       return NextResponse.json({ error: 'No se encontraron filas con datos.' }, { status: 422 })
@@ -152,7 +172,7 @@ export async function POST(request: NextRequest) {
     let fotosActualizadas = 0
     const errores: string[] = []
 
-    // Obtener las fotos actuales de todos los equipos del archivo en una sola consulta
+    // Obtener las fotos actuales de todos los equipos en una sola consulta
     const allPartes = rows.map(r => r.numero_parte)
     const { data: existingLaptops } = await supabase
       .from('laptops')
@@ -163,22 +183,21 @@ export async function POST(request: NextRequest) {
       (existingLaptops || []).map(l => [l.numero_parte, l])
     )
 
-    for (const row of rows) {
+    // Procesar filas con concurrencia controlada (5 en paralelo)
+    const CONCURRENCY = 5
+    const processRow = async (row: PhotoRow): Promise<void> => {
       const safePart = row.numero_parte.replace(/[^a-zA-Z0-9-_]/g, '_')
       const dbUpdates: Record<string, string> = {}
       const existing = existingMap.get(row.numero_parte)
 
-      for (const slot of [1, 2, 3] as const) {
+      await Promise.all(([1, 2, 3] as const).map(async (slot) => {
         const url = row[`foto_${slot}`]
-        if (!url) continue
-
-        // Si ya tiene foto en este slot, ignorar
-        if (existing?.[`foto_${slot}`]) continue
+        if (!url || existing?.[`foto_${slot}`]) return
 
         const result = await fetchImage(url)
         if ('error' in result) {
           errores.push(`${row.numero_parte} foto_${slot}: ${result.error}`)
-          continue
+          return
         }
 
         const storagePath = `${safePart}/foto-${slot}.${result.ext}`
@@ -191,13 +210,13 @@ export async function POST(request: NextRequest) {
 
         if (uploadError) {
           errores.push(`${row.numero_parte} foto_${slot}: error al subir (${uploadError.message})`)
-          continue
+          return
         }
 
         const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath)
         dbUpdates[`foto_${slot}`] = urlData.publicUrl
         fotosActualizadas++
-      }
+      }))
 
       if (Object.keys(dbUpdates).length > 0) {
         const { error: dbError } = await supabase
@@ -210,6 +229,10 @@ export async function POST(request: NextRequest) {
           fotosActualizadas -= Object.keys(dbUpdates).length
         }
       }
+    }
+
+    for (let i = 0; i < rows.length; i += CONCURRENCY) {
+      await Promise.all(rows.slice(i, i + CONCURRENCY).map(processRow))
     }
 
     return NextResponse.json({

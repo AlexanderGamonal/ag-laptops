@@ -11,11 +11,11 @@ const ALL_EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const ip = getClientIp(request)
-    const rl = rateLimit(`photos:${ip}`, 60, 10 * 60 * 1000)
+    const rl = await rateLimit(`photos:${ip}`, 60, 10 * 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Demasiadas solicitudes. Intenta de nuevo en ${rl.retryAfterSeconds}s.` },
@@ -28,9 +28,10 @@ export async function POST(
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
+    const { id } = await params
     const formData = await request.formData()
-    const file    = formData.get('file') as File | null
-    const slot    = formData.get('slot') as string | null // '1', '2', o '3'
+    const file = formData.get('file') as File | null
+    const slot = formData.get('slot') as string | null
 
     if (!file) {
       return NextResponse.json({ error: 'No se envió ningún archivo.' }, { status: 400 })
@@ -53,11 +54,10 @@ export async function POST(
 
     const supabase = createAdminClient()
 
-    // Obtener la laptop para usar el numero_parte como ruta
     const { data: laptop, error: laptopError } = await supabase
       .from('laptops')
       .select('id, numero_parte')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (laptopError || !laptop) {
@@ -67,11 +67,9 @@ export async function POST(
     const safePart = laptop.numero_parte.replace(/[^a-zA-Z0-9-_]/g, '_')
     const storagePath = `${safePart}/foto-${slot}.webp`
 
-    // Borrar todas las extensiones anteriores del slot antes de subir
     const oldPaths = ALL_EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
     await supabase.storage.from(BUCKET).remove(oldPaths)
 
-    // Convertir a WebP y subir
     const rawBuffer = Buffer.from(await file.arrayBuffer())
     const webpBuffer = await sharp(rawBuffer).webp({ quality: 85 }).toBuffer()
 
@@ -86,19 +84,14 @@ export async function POST(
       return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
-    // Obtener la URL pública
-    const { data: urlData } = supabase.storage
-      .from(BUCKET)
-      .getPublicUrl(storagePath)
-
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(storagePath)
     const publicUrl = urlData.publicUrl
 
-    // Guardar la URL en la columna correspondiente
     const fotoField = `foto_${slot}` as 'foto_1' | 'foto_2' | 'foto_3'
     const { error: updateError } = await supabase
       .from('laptops')
       .update({ [fotoField]: publicUrl })
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
@@ -113,7 +106,7 @@ export async function POST(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await requireAdminRequest(request)
@@ -121,6 +114,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
+    const { id } = await params
     const { searchParams } = new URL(request.url)
     const slot = searchParams.get('slot')
 
@@ -131,29 +125,25 @@ export async function DELETE(
     const supabase = createAdminClient()
     const fotoField = `foto_${slot}` as 'foto_1' | 'foto_2' | 'foto_3'
 
-    // Obtener la URL actual para borrar del storage
     const { data: laptop } = await supabase
       .from('laptops')
       .select(`id, numero_parte, ${fotoField}`)
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (laptop) {
       const laptopData = laptop as { id: string; numero_parte: string; foto_1?: string | null; foto_2?: string | null; foto_3?: string | null }
-      const currentPhoto = laptopData[fotoField as 'foto_1' | 'foto_2' | 'foto_3']
-      if (currentPhoto) {
+      if (laptopData[fotoField]) {
         const safePart = laptopData.numero_parte.replace(/[^a-zA-Z0-9-_]/g, '_')
-        const extensions = ['jpg', 'jpeg', 'png', 'webp', 'gif']
-        const paths = extensions.map(ext => `${safePart}/foto-${slot}.${ext}`)
+        const paths = ALL_EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
         await supabase.storage.from(BUCKET).remove(paths)
       }
     }
 
-    // Limpiar el campo en la DB
     const { error } = await supabase
       .from('laptops')
       .update({ [fotoField]: null })
-      .eq('id', params.id)
+      .eq('id', id)
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
