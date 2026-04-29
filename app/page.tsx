@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import StorefrontClient from '@/components/StorefrontClient'
 import { getPublicLaptops } from '@/lib/store-data'
 import { getStoreEmail, getWhatsAppNumber } from '@/lib/server-env'
@@ -9,10 +10,12 @@ export default async function StorePage() {
   const laptops = await getPublicLaptops()
 
   return (
-    <StorefrontClient
-      laptops={laptops}
-      waNumber={getWhatsAppNumber()}
-      storeEmail={getStoreEmail()}
-    />
+    <Suspense>
+      <StorefrontClient
+        laptops={laptops}
+        waNumber={getWhatsAppNumber()}
+        storeEmail={getStoreEmail()}
+      />
+    </Suspense>
   )
 }
