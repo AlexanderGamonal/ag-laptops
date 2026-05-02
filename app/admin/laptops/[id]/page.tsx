@@ -6,23 +6,29 @@ import { getBrowserSupabase, type Laptop } from '@/lib/supabase'
 import { formatSellingPrice, formatPrice } from '@/lib/pricing'
 import PhotoUploader from '@/components/PhotoUploader'
 
+async function getAdminToken(): Promise<string | null> {
+  const { data } = await getBrowserSupabase().auth.getSession()
+  return data.session?.access_token ?? null
+}
+
 export default function EditLaptopPhotos({ params }: { params: { id: string } }) {
   const [laptop,  setLaptop]  = useState<Laptop | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = getBrowserSupabase()
-    supabase
-      .from('laptops')
-      .select('*')
-      .eq('id', params.id)
-      .single()
-      .then(({ data, error }) => {
-        if (error) setError('Laptop no encontrada.')
-        else setLaptop(data)
-        setLoading(false)
+    getAdminToken().then(async token => {
+      const res = await fetch(`/api/laptops/${params.id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error || 'Laptop no encontrada.')
+      } else {
+        setLaptop(data.laptop)
+      }
+      setLoading(false)
+    })
   }, [params.id])
 
   function handlePhotoUpdate(slot: 1 | 2 | 3, url: string | null) {

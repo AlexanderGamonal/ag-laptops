@@ -2,7 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 
-export async function PATCH(
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  try {
+    const admin = await requireAdminRequest(request)
+    if (!admin) {
+      return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
+    }
+
+    const supabase = createAdminClient()
+    const { data, error } = await supabase
+      .from('laptops')
+      .select('*')
+      .eq('id', params.id)
+      .single()
+
+    if (error || !data) {
+      return NextResponse.json({ error: 'Laptop no encontrada.' }, { status: 404 })
+    }
+
+    return NextResponse.json({ laptop: data })
+  } catch (err) {
+    console.error('[GET /api/laptops/[id]]', err)
+    return NextResponse.json({ error: 'Error interno.' }, { status: 500 })
+  }
+}
+
+
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
