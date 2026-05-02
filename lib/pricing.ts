@@ -77,11 +77,15 @@ export function calcSellingPrice(
 export function formatPrice(
   price: number | null,
   fallback = "Consultar precio",
+  currency = "PEN",
 ): string {
   if (price === null) return fallback;
-  return new Intl.NumberFormat("es-PE", {
+
+  const locale = currency === "PEN" ? "es-PE" : "en-US";
+
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "PEN",
+    currency,
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
   }).format(price);
