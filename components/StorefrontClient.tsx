@@ -29,6 +29,15 @@ import { EMPTY_FILTERS } from "@/lib/storefront-types";
 
 const PAGE_SIZE = 24;
 
+const USE_CASE_PRESETS: { label: string; icon: string; partialFilters: Partial<Filters> }[] = [
+  { label: "Gaming",        icon: "🎮", partialFilters: { search: "gaming" } },
+  { label: "Trabajo",       icon: "💼", partialFilters: { processor: "Core i7" } },
+  { label: "Estudio",       icon: "🎓", partialFilters: { precioMax: "2500" } },
+  { label: "Económica",     icon: "💰", partialFilters: { precioMax: "1800" } },
+  { label: "Apple",         icon: "🍎", partialFilters: { marca: "Apple" } },
+  { label: "Reacondicionada", icon: "♻️", partialFilters: { condicion: "Refurbished" } },
+];
+
 const FAQ = [
   {
     q: "¿El precio que veo es lo que voy a pagar?",
@@ -326,6 +335,22 @@ export default function StorefrontClient({
     });
   }
 
+  const activePreset = USE_CASE_PRESETS.find(
+    (p) =>
+      JSON.stringify({ ...EMPTY_FILTERS, ...p.partialFilters }) ===
+      JSON.stringify(filters),
+  )?.label ?? null;
+
+  function applyPreset(preset: (typeof USE_CASE_PRESETS)[number]) {
+    startTransition(() => {
+      if (activePreset === preset.label) {
+        applyCatalogState(EMPTY_FILTERS, "recent");
+      } else {
+        applyCatalogState({ ...EMPTY_FILTERS, ...preset.partialFilters }, sort);
+      }
+    });
+  }
+
   function toggleMobileFilters() {
     const next = !mobileFiltersOpen;
     setMobileFiltersOpen(next);
@@ -382,6 +407,25 @@ export default function StorefrontClient({
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <StorefrontHero laptopsCount={laptops.length} />
+
+        {/* Use-case preset chips */}
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {USE_CASE_PRESETS.map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => applyPreset(preset)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                activePreset === preset.label
+                  ? "bg-slate-900 text-white border-slate-900"
+                  : "bg-white text-slate-700 border-slate-200 hover:border-slate-400"
+              }`}
+            >
+              <span>{preset.icon}</span>
+              <span>{preset.label}</span>
+            </button>
+          ))}
+        </div>
 
         <div className="grid lg:grid-cols-[240px_minmax(0,1fr)] gap-5">
           <FilterPanel
@@ -508,7 +552,7 @@ export default function StorefrontClient({
               <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   {visibleItems.map(({ laptop, specs }) => (
-                    <LaptopCard key={laptop.id} laptop={laptop} specs={specs} />
+                    <LaptopCard key={laptop.id} laptop={laptop} specs={specs} waNumber={waNumber} />
                   ))}
                 </div>
 
