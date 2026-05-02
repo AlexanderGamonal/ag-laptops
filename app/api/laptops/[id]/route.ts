@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const admin = await requireAdminRequest(request)
@@ -12,11 +12,12 @@ export async function GET(
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
+    const { id } = await params
     const supabase = createAdminClient()
     const { data, error } = await supabase
       .from('laptops')
       .select('*')
-      .eq('id', params.id)
+      .eq('id', id)
       .single()
 
     if (error || !data) {
@@ -30,7 +31,7 @@ export async function GET(
   }
 }
 
-
+export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
