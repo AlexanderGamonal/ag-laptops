@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auto Photo Finder — AG Laptops</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+      --blue: #2563eb;
+      --blue-light: #eff6ff;
+      --green: #16a34a;
+      --green-light: #f0fdf4;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --amber: #d97706;
+      --amber-light: #fffbeb;
+      --radius: 14px;
+      --shadow: 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 60px;
+    }
+
+    header {
+      max-width: 900px;
+      margin: 0 auto 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    header .logo {
+      width: 40px; height: 40px;
+      background: var(--blue);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    header .logo svg { width: 22px; height: 22px; color: #fff; }
+    header h1 { font-size: 1.25rem; font-weight: 700; }
+    header p  { font-size: .8rem; color: var(--muted); }
+
+    .container { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+    }
+    .card-header h2 { font-size: .95rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .card-header .chevron { transition: transform .2s; font-size: .7rem; color: var(--muted); }
+    .card-header.open .chevron { transform: rotate(180deg); }
+    .card-body { padding: 18px; }
+    .card-body.hidden { display: none; }
+
+    label { font-size: .82rem; font-weight: 500; color: var(--muted); display: block; margin-bottom: 5px; }
+
+    input[type=text], input[type=password], textarea {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      font-size: .875rem;
+      outline: none;
+      transition: border-color .15s, box-shadow .15s;
+      font-family: inherit;
+      background: var(--bg);
+    }
+    input:focus, textarea:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.12);
+    }
+    textarea { resize: vertical; min-height: 90px; }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 140px; }
+
+    btn, button, .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      padding: 9px 16px;
+      border: none; border-radius: 10px;
+      font-size: .875rem; font-weight: 600;
+      cursor: pointer; transition: opacity .15s, transform .1s;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    button:active { transform: scale(.97); }
+    button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+    .btn-primary { background: var(--blue); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: .9; }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { background: #f1f5f9; }
+    .btn-green { background: #22c55e; color: #fff; }
+    .btn-green:hover:not(:disabled) { opacity: .9; }
+    .btn-sm { padding: 6px 12px; font-size: .8rem; border-radius: 8px; }
+
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 999px;
+      font-size: .75rem; font-weight: 600;
+    }
+    .badge-blue  { background: var(--blue-light);  color: var(--blue); }
+    .badge-green { background: var(--green-light); color: var(--green); }
+    .badge-amber { background: var(--amber-light); color: var(--amber); }
+    .badge-red   { background: var(--red-light);   color: var(--red); }
+
+    .alert {
+      padding: 10px 14px; border-radius: 10px; font-size: .83rem; margin-top: 8px;
+    }
+    .alert-info   { background: var(--blue-light);  border: 1px solid #bfdbfe; color: #1e40af; }
+    .alert-error  { background: var(--red-light);   border: 1px solid #fecaca; color: #991b1b; }
+    .alert-amber  { background: var(--amber-light); border: 1px solid #fde68a; color: #92400e; }
+    .alert pre    { font-size: .75rem; margin-top: 6px; white-space: pre-wrap; word-break: break-all; }
+
+    /* ─── Setup guide ─── */
+    .steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+    .steps li {
+      display: flex; gap: 10px; align-items: flex-start;
+      font-size: .83rem; line-height: 1.5;
+    }
+    .steps li .num {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--blue); color: #fff;
+      font-size: .72rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 1px;
+    }
+    .steps a { color: var(--blue); }
+
+    /* ─── Product results ─── */
+    #results { display: flex; flex-direction: column; gap: 20px; }
+
+    .product-block {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .product-block-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 10px; flex-wrap: wrap;
+      background: #f8fafc;
+    }
+    .product-block-header .info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .product-block-header .part { font-weight: 700; font-size: .95rem; }
+    .product-block-header .desc { font-size: .78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 500px; }
+    .product-block-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+
+    .thumb-grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+      padding: 14px 16px;
+    }
+    @media (max-width: 700px) { .thumb-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 400px) { .thumb-grid { grid-template-columns: repeat(2, 1fr); } }
+
+    .thumb-item {
+      position: relative;
+      aspect-ratio: 1;
+      border-radius: 10px;
+      border: 2px solid var(--border);
+      overflow: hidden;
+      cursor: pointer;
+      transition: border-color .15s, box-shadow .15s;
+      background: var(--bg);
+    }
+    .thumb-item:hover { border-color: #93c5fd; box-shadow: 0 0 0 2px #bfdbfe; }
+    .thumb-item.selected { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.2); }
+    .thumb-item img {
+      width: 100%; height: 100%;
+      object-fit: contain;
+      padding: 4px;
+    }
+    .thumb-item .check {
+      position: absolute; top: 4px; right: 4px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: var(--blue); color: #fff;
+      font-size: .65rem; display: none;
+      align-items: center; justify-content: center;
+    }
+    .thumb-item.selected .check { display: flex; }
+
+    .thumb-error {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      background: var(--bg);
+      border: 2px dashed var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .7rem; color: var(--muted); text-align: center; padding: 8px;
+    }
+
+    .product-footer {
+      padding: 10px 16px;
+      border-top: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: #f8fafc;
+    }
+    .product-footer .selected-url {
+      font-size: .75rem; color: var(--muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      flex: 1; min-width: 0;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 16px; height: 16px;
+      border: 2px solid rgba(255,255,255,.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    .spinner.dark { border-color: rgba(0,0,0,.15); border-top-color: var(--blue); }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-row {
+      padding: 20px 16px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: .85rem; color: var(--muted);
+    }
+
+    #status-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 10px 20px;
+      background: var(--text); color: #fff;
+      font-size: .82rem; display: none;
+      align-items: center; gap: 10px;
+      z-index: 100;
+    }
+    #status-bar.visible { display: flex; }
+    #status-bar .status-text { flex: 1; }
+
+    .divider { height: 1px; background: var(--border); margin: 4px 0; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Auto Photo Finder</h1>
+    <p>AG Laptops · Busca y descarga fotos de productos automáticamente</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- ─── Setup ─── -->
+  <div class="card">
+    <div class="card-header" onclick="toggleCard(this)">
+      <h2>
+        <span>⚙️</span> Configuración — Google Custom Search API
+        <span id="config-status"></span>
+      </h2>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="card-body" id="config-body">
+      <div class="grid-2" style="margin-bottom:14px">
+        <div>
+          <label>Google API Key</label>
+          <input type="password" id="api-key" placeholder="AIzaSy..." autocomplete="off" />
+        </div>
+        <div>
+          <label>Search Engine ID (cx)</label>
+          <input type="text" id="cx" placeholder="a1b2c3d4e5f6g7h8i" autocomplete="off" />
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <button class="btn-primary btn-sm" onclick="saveConfig()">💾 Guardar configuración</button>
+        <button class="btn-secondary btn-sm" onclick="testConfig()">🔍 Probar conexión</button>
+      </div>
+      <div id="config-msg"></div>
+
+      <div class="divider" style="margin:16px 0"></div>
+
+      <details>
+        <summary style="font-size:.83rem;font-weight:600;cursor:pointer;color:var(--blue);margin-bottom:10px">
+          📖 ¿Cómo obtener las credenciales? (clic para expandir)
+        </summary>
+        <ul class="steps" style="margin-top:10px">
+          <li>
+            <span class="num">1</span>
+            <span>Ve a <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → Crea un proyecto (o usa uno existente)</span>
+          </li>
+          <li>
+            <span class="num">2</span>
+            <span>En el menú: <strong>APIs y servicios → Biblioteca</strong> → busca <strong>"Custom Search API"</strong> → Habilitar</span>
+          </li>
+          <li>
+            <span class="num">3</span>
+            <span>Ve a <strong>APIs y servicios → Credenciales → Crear credencial → Clave de API</strong>. Copia esa clave.</span>
+          </li>
+          <li>
+            <span class="num">4</span>
+            <span>Ve a <a href="https://programmablesearchengine.google.com" target="_blank">programmablesearchengine.google.com</a> → <strong>Agregar</strong> → en "Qué buscar" elige <strong>"Buscar en toda la web"</strong> → Crear</span>
+          </li>
+          <li>
+            <span class="num">5</span>
+            <span>Copia el <strong>ID del motor de búsqueda (cx)</strong> que aparece en la página de tu motor.</span>
+          </li>
+          <li>
+            <span class="num">6</span>
+            <span>Pega ambos valores arriba y haz clic en <strong>Guardar configuración</strong>. El plan gratuito permite <strong>100 búsquedas/día</strong>.</span>
+          </li>
+        </ul>
+      </details>
+    </div>
+  </div>
+
+  <!-- ─── Input productos ─── -->
+  <div class="card">
+    <div class="card-header open" onclick="toggleCard(this)">
+      <h2><span>📋</span> Productos a buscar</h2>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="card-body" id="products-body">
+
+      <!-- Búsqueda rápida de uno -->
+      <p style="font-size:.82rem;font-weight:600;margin-bottom:8px">Búsqueda rápida (un producto)</p>
+      <div class="row" style="margin-bottom:16px">
+        <div>
+          <label>Part Number del fabricante</label>
+          <input type="text" id="single-part" placeholder="AN0075CL, 83JC00LYUS..." />
+        </div>
+        <div>
+          <label>Descripción del producto</label>
+          <input type="text" id="single-desc" placeholder="HP OMEN 16 GAMING INTEL CORE I7..." />
+        </div>
+        <div style="flex:0">
+          <label>&nbsp;</label>
+          <button class="btn-primary" onclick="searchSingle()">🔍 Buscar</button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+      <p style="font-size:.82rem;font-weight:600;margin:12px 0 8px">Búsqueda masiva (JSON)</p>
+      <label>Pega un array JSON con tus productos</label>
+      <textarea id="json-input" placeholder='[
+  { "numero_parte": "W06264", "part_number": "AN0075CL", "descripcion": "HP OMEN 16-AN0075CL GAMING INTEL CORE I7" },
+  { "numero_parte": "W06298", "part_number": "MHFJ4LL/A", "descripcion": "APPLE MACBOOK AIR M2" }
+]'></textarea>
+      <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn-primary" onclick="searchAll()">
+          <span id="search-all-icon">▶</span> Buscar fotos para todos
+        </button>
+        <button class="btn-secondary" onclick="loadSample()">📄 Cargar ejemplo</button>
+        <button class="btn-secondary" onclick="clearAll()">🗑 Limpiar</button>
+      </div>
+      <div id="search-msg" style="margin-top:8px"></div>
+    </div>
+  </div>
+
+  <!-- ─── Resultados ─── -->
+  <div id="results"></div>
+
+</div><!-- /container -->
+
+<!-- Status bar -->
+<div id="status-bar">
+  <div class="spinner"></div>
+  <span class="status-text" id="status-text">Buscando...</span>
+  <button class="btn-secondary btn-sm" onclick="cancelSearch()" style="background:#fff2;color:#fff;border-color:#fff3">✕ Cancelar</button>
+</div>
+
+<script>
+// ─── Config ──────────────────────────────────────────────────────────────────
+const LS_KEY_API = 'agpf_api_key'
+const LS_KEY_CX  = 'agpf_cx'
+let cancelled = false
+
+function loadConfig() {
+  const k = localStorage.getItem(LS_KEY_API) || ''
+  const c = localStorage.getItem(LS_KEY_CX)  || ''
+  document.getElementById('api-key').value = k
+  document.getElementById('cx').value = c
+  updateConfigStatus()
+}
+
+function saveConfig() {
+  const k = document.getElementById('api-key').value.trim()
+  const c = document.getElementById('cx').value.trim()
+  if (!k || !c) { showMsg('config-msg', 'error', 'Completa ambos campos antes de guardar.'); return }
+  localStorage.setItem(LS_KEY_API, k)
+  localStorage.setItem(LS_KEY_CX, c)
+  showMsg('config-msg', 'success', '✓ Configuración guardada.')
+  updateConfigStatus()
+}
+
+function updateConfigStatus() {
+  const k = localStorage.getItem(LS_KEY_API)
+  const c = localStorage.getItem(LS_KEY_CX)
+  const el = document.getElementById('config-status')
+  el.innerHTML = (k && c)
+    ? '<span class="badge badge-green" style="margin-left:8px">✓ Configurada</span>'
+    : '<span class="badge badge-amber" style="margin-left:8px">⚠ Sin configurar</span>'
+}
+
+async function testConfig() {
+  const k = document.getElementById('api-key').value.trim() || localStorage.getItem(LS_KEY_API)
+  const c = document.getElementById('cx').value.trim() || localStorage.getItem(LS_KEY_CX)
+  if (!k || !c) { showMsg('config-msg', 'error', 'Primero guarda la configuración.'); return }
+  showMsg('config-msg', 'info', '🔄 Probando conexión...')
+  try {
+    const url = `https://www.googleapis.com/customsearch/v1?key=${k}&cx=${c}&q=laptop&searchType=image&num=1`
+    const res = await fetch(url)
+    const data = await res.json()
+    if (data.error) {
+      showMsg('config-msg', 'error', `❌ Error: ${data.error.message}`)
+    } else {
+      showMsg('config-msg', 'success', '✓ Conexión exitosa. La API funciona correctamente.')
+    }
+  } catch(e) {
+    showMsg('config-msg', 'error', `❌ Error de red: ${e.message}`)
+  }
+}
+
+// ─── Helpers UI ──────────────────────────────────────────────────────────────
+function toggleCard(header) {
+  header.classList.toggle('open')
+  const bodyId = header.nextElementSibling.id
+  const body = document.getElementById(bodyId)
+  body.classList.toggle('hidden')
+}
+
+function showMsg(targetId, type, text) {
+  const el = document.getElementById(targetId)
+  if (!el) return
+  const cls = type === 'error' ? 'alert-error' : type === 'success' ? 'alert-info' : 'alert-info'
+  el.innerHTML = `<div class="alert ${cls}">${text}</div>`
+}
+
+function setStatus(text) {
+  document.getElementById('status-text').textContent = text
+  document.getElementById('status-bar').classList.add('visible')
+}
+
+function hideStatus() {
+  document.getElementById('status-bar').classList.remove('visible')
+}
+
+function cancelSearch() {
+  cancelled = true
+  hideStatus()
+}
+
+// ─── Build query ─────────────────────────────────────────────────────────────
+function buildQuery(product) {
+  if (product.part_number && product.part_number.length > 3) {
+    return `"${product.part_number}" laptop product image white background`
+  }
+  const desc = (product.descripcion || product.numero_parte || '').substring(0, 80)
+  return `${desc} laptop product image`
+}
+
+// ─── Google Custom Search ─────────────────────────────────────────────────────
+async function searchImages(query) {
+  const k = localStorage.getItem(LS_KEY_API)
+  const c = localStorage.getItem(LS_KEY_CX)
+  if (!k || !c) throw new Error('Configura la API Key y el CX primero.')
+
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(k)}&cx=${encodeURIComponent(c)}&q=${encodeURIComponent(query)}&searchType=image&num=6&imgType=photo&safe=active&imgSize=large`
+  const res = await fetch(url)
+  const data = await res.json()
+
+  if (data.error) throw new Error(data.error.message)
+  return (data.items || []).map(item => ({
+    thumb: item.image?.thumbnailLink || item.link,
+    full:  item.link,
+    title: item.title,
+  }))
+}
+
+// ─── WebP conversion + download ──────────────────────────────────────────────
+async function downloadWebP(imageUrl, filename) {
+  const PROXY = 'https://corsproxy.io/?url='
+  const proxied = PROXY + encodeURIComponent(imageUrl)
+
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.onload = () => {
+      const canvas = document.createElement('canvas')
+      canvas.width  = img.naturalWidth  || 800
+      canvas.height = img.naturalHeight || 600
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#ffffff'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.drawImage(img, 0, 0)
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('No se pudo convertir a WebP')); return }
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = `${filename}.webp`
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+        resolve()
+      }, 'image/webp', 0.85)
+    }
+    img.onerror = () => {
+      // Si falla el proxy, intentar sin proxy (puede funcionar si la imagen tiene CORS)
+      const img2 = new Image()
+      img2.crossOrigin = 'anonymous'
+      img2.onload = () => {
+        const canvas = document.createElement('canvas')
+        canvas.width  = img2.naturalWidth  || 800
+        canvas.height = img2.naturalHeight || 600
+        const ctx = canvas.getContext('2d')
+        ctx.fillStyle = '#ffffff'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img2, 0, 0)
+        canvas.toBlob(blob => {
+          if (!blob) { reject(new Error('No se pudo convertir a WebP')); return }
+          const a = document.createElement('a')
+          a.href = URL.createObjectURL(blob)
+          a.download = `${filename}.webp`
+          a.click()
+          setTimeout(() => URL.revokeObjectURL(a.href), 5000)
+          resolve()
+        }, 'image/webp', 0.85)
+      }
+      img2.onerror = () => reject(new Error('No se pudo cargar la imagen. Intenta descargarla manualmente.'))
+      img2.src = imageUrl
+    }
+    img.src = proxied
+  })
+}
+
+// ─── Render product block ─────────────────────────────────────────────────────
+function renderProductBlock(product, images, error) {
+  const id = 'p-' + (product.numero_parte || Math.random().toString(36).slice(2))
+  const safeId = id.replace(/[^a-zA-Z0-9-_]/g, '_')
+
+  const header = `
+    <div class="product-block-header">
+      <div class="info">
+        <span class="part">${product.numero_parte || '—'}</span>
+        <span class="desc">${product.part_number ? `[${product.part_number}] ` : ''}${product.descripcion || ''}</span>
+      </div>
+      <div class="product-block-actions">
+        <span class="badge badge-blue">${images.length} foto${images.length !== 1 ? 's' : ''}</span>
+        <button class="btn-green btn-sm" onclick="downloadSelected('${safeId}')" id="dl-btn-${safeId}" disabled>↓ Descargar WebP</button>
+      </div>
+    </div>`
+
+  let thumbsHtml = ''
+  if (error) {
+    thumbsHtml = `<div class="loading-row"><span class="badge badge-red">❌ ${error}</span></div>`
+  } else if (images.length === 0) {
+    thumbsHtml = `<div class="loading-row"><span class="badge badge-amber">⚠ Sin resultados para esta búsqueda</span></div>`
+  } else {
+    thumbsHtml = '<div class="thumb-grid">'
+    images.forEach((img, i) => {
+      thumbsHtml += `
+        <div class="thumb-item" id="thumb-${safeId}-${i}"
+          onclick="selectThumb('${safeId}', ${i}, '${encodeURIComponent(img.full)}')"
+          title="${img.title || ''}">
+          <img src="${img.thumb}" alt="${img.title || 'foto ' + (i+1)}"
+            onerror="this.parentElement.style.opacity='.3'" loading="lazy" />
+          <div class="check">✓</div>
+        </div>`
+    })
+    thumbsHtml += '</div>'
+  }
+
+  const footer = `
+    <div class="product-footer">
+      <span class="selected-url" id="sel-url-${safeId}">← Haz clic en una foto para seleccionarla</span>
+    </div>`
+
+  const block = document.createElement('div')
+  block.className = 'product-block'
+  block.id = safeId
+  block.dataset.part = product.numero_parte || ''
+  block.innerHTML = header + thumbsHtml + footer
+  return block
+}
+
+// State: selectedImages[safeId] = { index, url }
+const selectedImages = {}
+
+function selectThumb(safeId, index, encodedUrl) {
+  const url = decodeURIComponent(encodedUrl)
+  // Quitar selección anterior
+  const prev = selectedImages[safeId]
+  if (prev !== undefined) {
+    const prevEl = document.getElementById(`thumb-${safeId}-${prev.index}`)
+    if (prevEl) prevEl.classList.remove('selected')
+  }
+  // Nueva selección
+  const el = document.getElementById(`thumb-${safeId}-${index}`)
+  if (el) el.classList.add('selected')
+  selectedImages[safeId] = { index, url }
+  // Mostrar URL y habilitar descarga
+  const urlEl = document.getElementById(`sel-url-${safeId}`)
+  if (urlEl) urlEl.textContent = url
+  const btn = document.getElementById(`dl-btn-${safeId}`)
+  if (btn) btn.disabled = false
+}
+
+async function downloadSelected(safeId) {
+  const sel = selectedImages[safeId]
+  if (!sel) { alert('Primero selecciona una imagen.'); return }
+  const block = document.getElementById(safeId)
+  const part = block?.dataset.part || safeId
+  const btn = document.getElementById(`dl-btn-${safeId}`)
+  const orig = btn.textContent
+  btn.disabled = true
+  btn.innerHTML = '<span class="spinner"></span> Convirtiendo...'
+  try {
+    await downloadWebP(sel.url, `${part}-foto-1`)
+    btn.textContent = '✓ Descargado'
+    btn.style.background = '#16a34a'
+    setTimeout(() => {
+      btn.textContent = orig
+      btn.style.background = ''
+      btn.disabled = false
+    }, 3000)
+  } catch(e) {
+    btn.textContent = orig
+    btn.disabled = false
+    alert(`Error al descargar: ${e.message}\n\nPuedes abrir la imagen en una nueva pestaña y guardarla manualmente.`)
+    window.open(sel.url, '_blank')
+  }
+}
+
+// ─── Search flow ─────────────────────────────────────────────────────────────
+async function searchSingle() {
+  const part = document.getElementById('single-part').value.trim()
+  const desc = document.getElementById('single-desc').value.trim()
+  if (!part && !desc) { alert('Ingresa al menos un Part Number o Descripción.'); return }
+  const product = { numero_parte: part || '—', part_number: part, descripcion: desc }
+  await runSearch([product])
+}
+
+async function searchAll() {
+  const raw = document.getElementById('json-input').value.trim()
+  if (!raw) { showMsg('search-msg', 'error', 'Pega el JSON de productos primero.'); return }
+  let products
+  try {
+    products = JSON.parse(raw)
+    if (!Array.isArray(products)) throw new Error('Debe ser un array []')
+    if (products.length === 0) throw new Error('El array está vacío')
+  } catch(e) {
+    showMsg('search-msg', 'error', `JSON inválido: ${e.message}`)
+    return
+  }
+  showMsg('search-msg', '', '')
+  await runSearch(products)
+}
+
+async function runSearch(products) {
+  cancelled = false
+  document.getElementById('results').innerHTML = ''
+  const icon = document.getElementById('search-all-icon')
+  if (icon) icon.innerHTML = '<span class="spinner"></span>'
+
+  for (let i = 0; i < products.length; i++) {
+    if (cancelled) break
+    const p = products[i]
+    const query = buildQuery(p)
+    setStatus(`Buscando ${i+1}/${products.length}: ${p.numero_parte || p.part_number || '—'} — "${query}"`)
+
+    let images = [], error = null
+    try {
+      images = await searchImages(query)
+    } catch(e) {
+      error = e.message
+    }
+
+    const block = renderProductBlock(p, images, error)
+    document.getElementById('results').appendChild(block)
+    block.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+
+    // Pausa entre peticiones para no exceder rate limit
+    if (i < products.length - 1 && !cancelled) {
+      await new Promise(r => setTimeout(r, 600))
+    }
+  }
+
+  hideStatus()
+  if (icon) icon.textContent = '▶'
+}
+
+function loadSample() {
+  document.getElementById('json-input').value = JSON.stringify([
+    { "numero_parte": "W06264", "part_number": "AN0075CL", "descripcion": "HP OMEN 16-AN0075CL GAMING INTEL CORE I7 16GB RAM 512GB SSD RTX 4060" },
+    { "numero_parte": "W06298", "part_number": "MHFJ4LL/A", "descripcion": "APPLE MACBOOK AIR 13 M2 8GB 256GB SPACE GRAY" },
+    { "numero_parte": "W03302", "part_number": "83JC00LYUS", "descripcion": "LENOVO THINKPAD E16 INTEL CORE I5 16GB RAM 512GB SSD" }
+  ], null, 2)
+}
+
+function clearAll() {
+  document.getElementById('json-input').value = ''
+  document.getElementById('results').innerHTML = ''
+  document.getElementById('search-msg').innerHTML = ''
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+loadConfig()
+
+// Cerrar el card de config si ya está configurado
+window.addEventListener('DOMContentLoaded', () => {
+  const k = localStorage.getItem(LS_KEY_API)
+  const c = localStorage.getItem(LS_KEY_CX)
+  if (k && c) {
+    const header = document.querySelector('.card-header')
+    const body = document.getElementById('config-body')
+    header.classList.remove('open')
+    body.classList.add('hidden')
+  }
+})
+</script>
+</body>
+</html>
