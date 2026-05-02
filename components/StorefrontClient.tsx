@@ -136,7 +136,7 @@ function matchesFilters(
     return false;
   if (excludedKey !== "gpu" && filters.gpu && specs.gpu_family !== filters.gpu)
     return false;
-  if (filters.precioMax && sellingPrice > Number.parseFloat(filters.precioMax))
+  if (filters.precioMax && (sellingPrice === null || sellingPrice > Number.parseFloat(filters.precioMax)))
     return false;
 
   return true;
@@ -221,7 +221,7 @@ export default function StorefrontClient({
       laptops.map((laptop) => ({
         laptop,
         specs: extractSpecs(laptop.descripcion),
-        sellingPrice: calcSellingPrice(laptop.precio ?? 0, laptop),
+        sellingPrice: laptop.precio != null ? calcSellingPrice(laptop.precio, laptop) : null,
       })),
     [laptops],
   );
@@ -249,8 +249,13 @@ export default function StorefrontClient({
       matchesFilters(item, filters, deferredSearch),
     );
     return active.toSorted((left, right) => {
-      if (sort === "price-asc") return left.sellingPrice - right.sellingPrice;
-      if (sort === "price-desc") return right.sellingPrice - left.sellingPrice;
+      if (sort === "price-asc" || sort === "price-desc") {
+        const l = left.sellingPrice, r = right.sellingPrice
+        if (l === null && r === null) return 0
+        if (l === null) return 1
+        if (r === null) return -1
+        return sort === "price-asc" ? l - r : r - l
+      }
       if (sort === "brand")
         return (left.laptop.marca || "").localeCompare(right.laptop.marca || "");
       return (

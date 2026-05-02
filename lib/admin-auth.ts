@@ -48,7 +48,7 @@ export async function requireAdminRequest(request: NextRequest) {
 }
 
 export async function requireAdminPage() {
-  const token = cookies().get(ADMIN_SESSION_COOKIE)?.value
+  const token = (await cookies()).get(ADMIN_SESSION_COOKIE)?.value
   const user = await getAdminUserFromToken(token)
 
   if (!user) {

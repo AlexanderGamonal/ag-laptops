@@ -1,8 +1,8 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
 export type ExcelRow = {
-  numero_parte: string   // CODIGO del proveedor (W06264, W02666...)
-  part_number:  string | null  // PART NUMBER del fabricante
+  numero_parte: string
+  part_number:  string | null
   descripcion:  string | null
   precio:       number | null
   condicion:    string | null
@@ -12,20 +12,21 @@ export type ExcelRow = {
 
 // ─── Detectar marca desde la descripción ────────────────────────────────────
 const BRAND_RULES: Array<{ test: RegExp; brand: string }> = [
-  { test: /\bLENOVO\b/i,            brand: 'Lenovo'  },
-  { test: /\bASUS\b/i,              brand: 'Asus'    },
-  { test: /\bDELL\b/i,              brand: 'Dell'    },
-  { test: /\bACER\b/i,              brand: 'Acer'    },
-  { test: /\bMSI\b/i,               brand: 'MSI'     },
-  { test: /^HP[\s\-]|[\s]HP[\s\-]/i, brand: 'HP'    },
+  { test: /\bAMAZON\b|\bKINDLE\b|\bAMAZON\s*BASICS\b|\bFIRE\s*HD\b|\bFIRE\s*HDX\b/i, brand: 'Amazon' },
+  { test: /\bLENOVO\b/i,              brand: 'Lenovo'    },
+  { test: /\bASUS\b/i,                brand: 'Asus'      },
+  { test: /\bDELL\b/i,                brand: 'Dell'      },
+  { test: /\bACER\b/i,                brand: 'Acer'      },
+  { test: /\bMSI\b/i,                 brand: 'MSI'       },
+  { test: /^HP[\s\-]|[\s]HP[\s\-]/i, brand: 'HP'        },
   { test: /\bAPPLE\b|\bIPAD\b|\bMACBOOK\b/i, brand: 'Apple' },
-  { test: /\bJBL\b/i,               brand: 'JBL'     },
-  { test: /\bONN\b/i,               brand: 'ONN'     },
-  { test: /\bSAMSUNG\b/i,           brand: 'Samsung' },
+  { test: /\bJBL\b/i,                 brand: 'JBL'       },
+  { test: /\bONN\b/i,                 brand: 'ONN'       },
+  { test: /\bSAMSUNG\b/i,             brand: 'Samsung'   },
   { test: /\bMICROSOFT\b|\bSURFACE\b/i, brand: 'Microsoft' },
-  { test: /\bLG\b/i,                brand: 'LG'      },
-  { test: /\bTOSHIBA\b/i,           brand: 'Toshiba' },
-  { test: /\bSONY\b/i,              brand: 'Sony'    },
+  { test: /\bLG\b/i,                  brand: 'LG'        },
+  { test: /\bTOSHIBA\b/i,             brand: 'Toshiba'   },
+  { test: /\bSONY\b/i,                brand: 'Sony'      },
 ]
 
 function extractBrand(descripcion: string): string | null {
@@ -35,77 +36,94 @@ function extractBrand(descripcion: string): string | null {
   return null
 }
 
-// ─── Parsear precio ──────────────────────────────────────────────────────────
-function parsePrice(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null
-  const str = String(value).replace(/[$,\s]/g, '')
+// ─── Normalizar valores de celda de ExcelJS ──────────────────────────────────
+// ExcelJS devuelve tipos complejos: fórmulas, rich text, hipervínculos, etc.
+function cellToRaw(value: ExcelJS.CellValue): string | number | null {
+  if (value === null || value === undefined) return null
+  if (typeof value === 'number' || typeof value === 'boolean') return value as number
+  if (typeof value === 'string') return value
+  if (value instanceof Date) return value.toISOString()
+  if (typeof value === 'object') {
+    // Fórmula: { formula, result }
+    if ('result' in value) return cellToRaw(value.result as ExcelJS.CellValue)
+    // Rich text: { richText: [{ text }] }
+    if ('richText' in value && Array.isArray(value.richText)) {
+      return value.richText.map((r: { text: string }) => r.text).join('')
+    }
+    // Hipervínculo: { text, hyperlink }
+    if ('text' in value) return String(value.text)
+    // Error de celda
+    if ('error' in value) return null
+  }
+  return String(value)
+}
+
+function parsePrice(value: ExcelJS.CellValue): number | null {
+  const raw = cellToRaw(value)
+  if (raw === null || raw === '') return null
+  const str = String(raw).replace(/[$,\s]/g, '')
   const num = parseFloat(str)
   return isNaN(num) || num <= 0 ? null : num
 }
 
-// ─── Limpiar texto ───────────────────────────────────────────────────────────
-function clean(value: unknown): string | null {
-  if (value === null || value === undefined) return null
-  const s = String(value).replace(/^\s+|\s+$/g, '').replace(/\t/g, '').trim()
+function clean(value: ExcelJS.CellValue): string | null {
+  const raw = cellToRaw(value)
+  if (raw === null) return null
+  const s = String(raw).replace(/\t/g, '').trim()
   return s || null
 }
 
-// ─── Detectar si una fila es un producto real ────────────────────────────────
-// Un producto tiene: CODIGO que empieza con W (ej. W06264) y precio numérico
-function isProductRow(row: unknown[]): boolean {
+function isProductRow(row: ExcelJS.CellValue[]): boolean {
   const col0 = clean(row[0])
-  const col3 = row[3]
-  if (!col0) return false
-  // El CODIGO siempre empieza con W seguido de dígitos
-  if (!/^W\d{4,6}$/i.test(col0)) return false
-  const price = parsePrice(col3)
-  return price !== null
+  if (!col0 || !/^W\d{4,6}$/i.test(col0)) return false
+  return parsePrice(row[3]) !== null
 }
 
-// ─── Parsear buffer del Excel ────────────────────────────────────────────────
-export function parseExcelBuffer(buffer: Buffer): {
+// ─── Leer workbook y convertir a array de arrays ─────────────────────────────
+async function readWorksheet(buffer: Buffer): Promise<ExcelJS.CellValue[][]> {
+  const workbook = new ExcelJS.Workbook()
+  await workbook.xlsx.load(buffer as unknown as ArrayBuffer)
+  const ws = workbook.worksheets[0]
+  if (!ws) return []
+
+  const rows: ExcelJS.CellValue[][] = []
+  ws.eachRow({ includeEmpty: false }, (row) => {
+    // row.values es 1-indexed; slice(1) elimina el primer elemento undefined
+    rows.push((row.values as ExcelJS.CellValue[]).slice(1))
+  })
+  return rows
+}
+
+// ─── API pública ──────────────────────────────────────────────────────────────
+export async function parseExcelBuffer(buffer: Buffer): Promise<{
   rows:    ExcelRow[]
   errors:  string[]
   headers: string[]
-} {
-  const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const sheetName = workbook.SheetNames[0]
-  const sheet = workbook.Sheets[sheetName]
-
-  const rawData: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
-    header:     1,
-    defval:     '',
-    blankrows:  false,
-  })
+}> {
+  const rawData = await readWorksheet(buffer)
 
   if (rawData.length < 2) {
     return { rows: [], errors: ['El archivo Excel está vacío o no tiene datos.'], headers: [] }
   }
 
-  // Intentar detectar el formato: ¿tiene columnas estándar en la primera fila?
-  const firstRow = rawData[0] as string[]
-  const firstRowText = firstRow.map(c => String(c).toLowerCase().trim()).join('|')
+  const firstRow = rawData[0].map(c => String(cellToRaw(c) ?? '').toLowerCase().trim())
+  const firstRowText = firstRow.join('|')
 
-  const usesStandardFormat = firstRowText.includes('codigo') || firstRowText.includes('part number')
-
-  if (usesStandardFormat) {
+  if (firstRowText.includes('codigo') || firstRowText.includes('part number')) {
     return parseFormatConCodigo(rawData)
-  } else {
-    return parseFormatoFlexible(rawData)
   }
+  return parseFormatoFlexible(rawData)
 }
 
 // ─── Formato del proveedor: CODIGO | PART NUMBER | DESCRIPCION | PRECIO | CONDICION | STATUS
-// Con múltiples filas de encabezado repetidas y filas de categoría intermedias
-function parseFormatConCodigo(rawData: unknown[][]): {
+function parseFormatConCodigo(rawData: ExcelJS.CellValue[][]): {
   rows: ExcelRow[]; errors: string[]; headers: string[]
 } {
   const rows: ExcelRow[] = []
   const errors: string[] = []
   const headers = ['CODIGO', 'PART NUMBER', 'DESCRIPCION', 'PRECIO', 'CONDICION', 'STATUS']
 
-  for (let i = 0; i < rawData.length; i++) {
-    const row = rawData[i] as unknown[]
+  for (const row of rawData) {
     if (!isProductRow(row)) continue
 
     const codigo      = clean(row[0])!
@@ -114,7 +132,6 @@ function parseFormatConCodigo(rawData: unknown[][]): {
     const precio      = parsePrice(row[3])
     const condicion   = clean(row[4])
     const estado      = clean(row[5])
-    const marca       = descripcion ? extractBrand(descripcion) : null
 
     rows.push({
       numero_parte: codigo,
@@ -123,7 +140,7 @@ function parseFormatConCodigo(rawData: unknown[][]): {
       precio,
       condicion,
       estado,
-      marca,
+      marca: descripcion ? extractBrand(descripcion) : null,
     })
   }
 
@@ -136,49 +153,44 @@ function parseFormatConCodigo(rawData: unknown[][]): {
   return { rows, errors, headers }
 }
 
-// ─── Formato flexible (encabezado único con nombres de columna variables)
+// ─── Formato flexible ─────────────────────────────────────────────────────────
 const COLUMN_MAP: Record<string, keyof Omit<ExcelRow, 'marca'>> = {
-  'numero de parte':  'numero_parte',
-  'numero_parte':     'numero_parte',
-  'no. parte':        'numero_parte',
-  'no parte':         'numero_parte',
-  'codigo':           'numero_parte',
-  'sku':              'numero_parte',
-
-  'part number':      'part_number',
-  'part_number':      'part_number',
-  'part#':            'part_number',
-
-  'descripcion':      'descripcion',
-  'descripción':      'descripcion',
-  'description':      'descripcion',
-  'detalle':          'descripcion',
-
-  'precio':           'precio',
-  'price':            'precio',
-  'costo':            'precio',
-  'precio unitario':  'precio',
+  'numero de parte':     'numero_parte',
+  'numero_parte':        'numero_parte',
+  'no. parte':           'numero_parte',
+  'no parte':            'numero_parte',
+  'codigo':              'numero_parte',
+  'sku':                 'numero_parte',
+  'part number':         'part_number',
+  'part_number':         'part_number',
+  'part#':               'part_number',
+  'descripcion':         'descripcion',
+  'descripción':         'descripcion',
+  'description':         'descripcion',
+  'detalle':             'descripcion',
+  'precio':              'precio',
+  'price':               'precio',
+  'costo':               'precio',
+  'precio unitario':     'precio',
   'precio incluido igv': 'precio',
-
-  'condicion':        'condicion',
-  'condición':        'condicion',
-  'condition':        'condicion',
-
-  'estado':           'estado',
-  'status':           'estado',
-  'disponibilidad':   'estado',
+  'condicion':           'condicion',
+  'condición':           'condicion',
+  'condition':           'condicion',
+  'estado':              'estado',
+  'status':              'estado',
+  'disponibilidad':      'estado',
 }
 
-function parseFormatoFlexible(rawData: unknown[][]): {
+function parseFormatoFlexible(rawData: ExcelJS.CellValue[][]): {
   rows: ExcelRow[]; errors: string[]; headers: string[]
 } {
-  const headerRow = rawData[0] as string[]
-  const headers   = headerRow.map(h => String(h))
+  const headerRow = rawData[0]
+  const headers   = headerRow.map(h => String(cellToRaw(h) ?? ''))
 
   const colMap: Record<number, keyof Omit<ExcelRow, 'marca'>> = {}
   headers.forEach((h, idx) => {
-    const normalized = String(h).toLowerCase().trim()
-    if (COLUMN_MAP[normalized]) colMap[idx] = COLUMN_MAP[normalized]
+    const key = h.toLowerCase().trim()
+    if (COLUMN_MAP[key]) colMap[idx] = COLUMN_MAP[key]
   })
 
   if (!Object.values(colMap).includes('numero_parte')) {
@@ -197,7 +209,7 @@ function parseFormatoFlexible(rawData: unknown[][]): {
   const errors: string[] = []
 
   for (let i = 1; i < rawData.length; i++) {
-    const row = rawData[i] as unknown[]
+    const row = rawData[i]
     const entry: Partial<ExcelRow> = {}
 
     for (const [idxStr, field] of Object.entries(colMap)) {

@@ -1,7 +1,6 @@
 import 'server-only'
 
 import { createClient } from '@supabase/supabase-js'
-import { unstable_noStore as noStore } from 'next/cache'
 import type { Laptop } from '@/lib/supabase'
 import { getSupabaseAnonKey, getSupabaseUrl } from '@/lib/server-env'
 
@@ -15,7 +14,6 @@ function createStoreClient() {
 }
 
 export async function getPublicLaptops() {
-  noStore()
   const supabase = createStoreClient()
   const { data, error } = await supabase
     .from('laptops')
@@ -31,7 +29,6 @@ export async function getPublicLaptops() {
 }
 
 export async function getPublicLaptopById(id: string) {
-  noStore()
   const supabase = createStoreClient()
   const { data, error } = await supabase
     .from('laptops')

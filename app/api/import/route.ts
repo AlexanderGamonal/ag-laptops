@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { requireAdminRequest } from '@/lib/admin-auth'
 import { createAdminClient } from '@/lib/supabase'
 import { parseExcelBuffer } from '@/lib/excel-parser'
@@ -7,7 +8,7 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request)
-    const rl = rateLimit(`import:${ip}`, 20, 10 * 60 * 1000)
+    const rl = await rateLimit(`import:${ip}`, 20, 10 * 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Demasiadas solicitudes. Intenta de nuevo en ${rl.retryAfterSeconds}s.` },
@@ -22,6 +23,7 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File | null
+    const confirmDelete = formData.get('confirm_delete') === 'true'
 
     if (!file) {
       return NextResponse.json({ error: 'No se envió ningún archivo.' }, { status: 400 })
@@ -40,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer())
-    const { rows, errors, headers } = parseExcelBuffer(buffer)
+    const { rows, errors, headers } = await parseExcelBuffer(buffer)
 
     if (errors.length > 0 && rows.length === 0) {
       return NextResponse.json({ error: errors[0], headers }, { status: 422 })
@@ -102,46 +104,79 @@ export async function POST(request: NextRequest) {
 
     if (fetchError) {
       importErrors.push(`Error al obtener registros existentes: ${fetchError.message}`)
-    } else {
-      const toDelete = (allDbRecords || []).filter(
-        (r: { id: string; numero_parte: string }) => !excelParts.has(r.numero_parte)
-      )
-
-      for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
-        const deleteBatch = toDelete.slice(i, i + BATCH_SIZE)
-        const idsToDelete = deleteBatch.map((r: { id: string }) => r.id)
-        const partsToDelete = deleteBatch.map((r: { numero_parte: string }) => r.numero_parte)
-
-        const EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
-        const storagePaths = partsToDelete.flatMap((part: string) => {
-          const safePart = part.replace(/[^a-zA-Z0-9-_]/g, '_')
-          return [1, 2, 3].flatMap(slot =>
-            EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
-          )
-        })
-
-        const { error: storageError } = await supabase.storage
-          .from('laptop-photos')
-          .remove(storagePaths)
-        if (storageError) {
-          importErrors.push(`Advertencia al limpiar fotos: ${storageError.message}`)
-        }
-
-        const { error: deleteError } = await supabase
-          .from('laptops')
-          .delete()
-          .in('id', idsToDelete)
-
-        if (deleteError) {
-          importErrors.push(
-            `Error al eliminar obsoletos (lote ${Math.floor(i / BATCH_SIZE) + 1}): ${deleteError.message}`
-          )
-          continue
-        }
-
-        deleted += deleteBatch.length
-      }
+      revalidatePath('/')
+      revalidatePath('/laptop/[id]', 'page')
+      return NextResponse.json({
+        success: true,
+        total: dedupedRows.length,
+        inserted,
+        skipped,
+        deleted: 0,
+        pendingDeletion: [],
+        errors: importErrors,
+      })
     }
+
+    const toDelete = (allDbRecords || []).filter(
+      (r: { id: string; numero_parte: string }) => !excelParts.has(r.numero_parte)
+    )
+
+    if (!confirmDelete) {
+      // Sin confirmación explícita: devolver candidatos para que el admin confirme antes de eliminar
+      revalidatePath('/')
+      revalidatePath('/laptop/[id]', 'page')
+      return NextResponse.json({
+        success: true,
+        total: dedupedRows.length,
+        inserted,
+        skipped,
+        deleted: 0,
+        pendingDeletion: toDelete.map((r: { id: string; numero_parte: string }) => ({
+          id: r.id,
+          numero_parte: r.numero_parte,
+        })),
+        errors: importErrors,
+      })
+    }
+
+    // confirm_delete=true: proceder con la eliminación
+    for (let i = 0; i < toDelete.length; i += BATCH_SIZE) {
+      const deleteBatch = toDelete.slice(i, i + BATCH_SIZE)
+      const idsToDelete = deleteBatch.map((r: { id: string }) => r.id)
+      const partsToDelete = deleteBatch.map((r: { numero_parte: string }) => r.numero_parte)
+
+      const EXTENSIONS = ['jpg', 'jpeg', 'png', 'webp', 'gif']
+      const storagePaths = partsToDelete.flatMap((part: string) => {
+        const safePart = part.replace(/[^a-zA-Z0-9-_]/g, '_')
+        return [1, 2, 3].flatMap(slot =>
+          EXTENSIONS.map(ext => `${safePart}/foto-${slot}.${ext}`)
+        )
+      })
+
+      const { error: storageError } = await supabase.storage
+        .from('laptop-photos')
+        .remove(storagePaths)
+      if (storageError) {
+        importErrors.push(`Advertencia al limpiar fotos: ${storageError.message}`)
+      }
+
+      const { error: deleteError } = await supabase
+        .from('laptops')
+        .delete()
+        .in('id', idsToDelete)
+
+      if (deleteError) {
+        importErrors.push(
+          `Error al eliminar obsoletos (lote ${Math.floor(i / BATCH_SIZE) + 1}): ${deleteError.message}`
+        )
+        continue
+      }
+
+      deleted += deleteBatch.length
+    }
+
+    revalidatePath('/')
+    revalidatePath('/laptop/[id]', 'page')
 
     return NextResponse.json({
       success: true,
@@ -149,12 +184,14 @@ export async function POST(request: NextRequest) {
       inserted,
       skipped,
       deleted,
+      pendingDeletion: [],
       errors: importErrors,
     })
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
     console.error('[/api/import]', err)
     return NextResponse.json(
-      { error: 'Error interno al procesar el archivo.' },
+      { error: `Error interno: ${message}` },
       { status: 500 }
     )
   }

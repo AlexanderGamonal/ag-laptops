@@ -2,7 +2,8 @@ import { extractSpecs, normalizeText } from "@/lib/spec-extractor";
 
 export const IGV_RATE = 0.18;
 export const COMMISSION_RATE = 0.99;
-export const TC_USD_TO_PEN = 3.5;
+// Configurable via NEXT_PUBLIC_TC_USD_PEN. Actualiza la env var sin necesidad de redeploy.
+export const TC_USD_TO_PEN = parseFloat(process.env.NEXT_PUBLIC_TC_USD_PEN || '3.5');
 
 type PriceableProduct = {
   descripcion?: string | null;

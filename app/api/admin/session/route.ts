@@ -4,12 +4,14 @@ import { ADMIN_SESSION_COOKIE } from '@/lib/auth-constants'
 import { getAdminUserFromToken } from '@/lib/admin-auth'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 
-const COOKIE_MAX_AGE = 60 * 60 * 8
+// Debe coincidir con el tiempo de expiración del access token de Supabase (1h por defecto).
+// Si lo subes en el dashboard de Supabase, actualiza este valor también.
+const COOKIE_MAX_AGE = 60 * 60
 
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request)
-    const rl = rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)
+    const rl = await rateLimit(`login:${ip}`, 10, 15 * 60 * 1000)
     if (!rl.allowed) {
       return NextResponse.json(
         { error: `Demasiados intentos. Intenta de nuevo en ${rl.retryAfterSeconds}s.` },
@@ -25,7 +27,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No autorizado.' }, { status: 401 })
     }
 
-    cookies().set(ADMIN_SESSION_COOKIE, accessToken, {
+    ;(await cookies()).set(ADMIN_SESSION_COOKIE, accessToken, {
       httpOnly: true,
       sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production',
@@ -41,6 +43,6 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE() {
-  cookies().delete(ADMIN_SESSION_COOKIE)
+  ;(await cookies()).delete(ADMIN_SESSION_COOKIE)
   return NextResponse.json({ success: true })
 }

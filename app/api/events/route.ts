@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 
 const ALLOWED_EVENTS = new Set([
   'whatsapp_click',
@@ -21,7 +21,11 @@ export async function POST(request: NextRequest) {
     const path    = typeof body?.path    === 'string' ? body.path    : null
     const payload = body?.payload && typeof body.payload === 'object' ? body.payload : null
 
-    const supabase = createAdminClient()
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { auth: { autoRefreshToken: false, persistSession: false } },
+    )
     await supabase.from('store_events').insert({ name, path, payload })
 
     return NextResponse.json({ success: true })

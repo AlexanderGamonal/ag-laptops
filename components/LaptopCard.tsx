@@ -75,7 +75,7 @@ export default function LaptopCard({ laptop, specs, waNumber }: LaptopCardProps)
           </div>
         )}
         {/* Badge condición sobre la imagen */}
-        {laptop.condicion && laptop.condicion.toLowerCase() === 'refurbished' && (
+        {laptop.condicion && /^(refurbished|reacondicionado)$/i.test(laptop.condicion) && (
           <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-600 text-white">
             Reacondicionado
           </div>
